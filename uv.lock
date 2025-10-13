@@ -77,7 +77,7 @@ wheels = [
 ]
 
 [[package]]
-name = "django-sql-pythontrace"
+name = "django-traceback-in-sql"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [

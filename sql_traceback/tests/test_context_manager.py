@@ -5,11 +5,11 @@ from unittest import mock
 from django.db import connection
 from django.test import TestCase, override_settings
 
-from sql_pythonstack import SqlStacktrace, sql_stacktrace
+from sql_traceback import SqlTraceback, sql_traceback
 
 
 @override_settings(DEBUG=True)
-class TestSqlStacktraceContextManager(TestCase):
+class TestSqlTracebackContextManager(TestCase):
     def setUp(self):
         # Ensure connection.queries is reset before each test
         connection.queries_log.clear()
@@ -29,7 +29,7 @@ class TestSqlStacktraceContextManager(TestCase):
         connection.queries_log.clear()
 
         # Now execute a query with the context manager
-        with sql_stacktrace(), self.assertNumQueries(1):  # noqa: SIM117
+        with sql_traceback(), self.assertNumQueries(1):  # noqa: SIM117
             with connection.cursor() as cursor:
                 cursor.execute("SELECT 1")
 
@@ -44,7 +44,7 @@ class TestSqlStacktraceContextManager(TestCase):
         connection.queries_log.clear()
 
         # Execute a query with the class-based context manager
-        with SqlStacktrace(), self.assertNumQueries(1):  # noqa: SIM117
+        with SqlTraceback(), self.assertNumQueries(1):  # noqa: SIM117
             with connection.cursor() as cursor:
                 cursor.execute("SELECT 1")
 
@@ -55,7 +55,7 @@ class TestSqlStacktraceContextManager(TestCase):
         """Test that the context manager works as a decorator."""
 
         # Define a decorated function
-        @SqlStacktrace()
+        @SqlTraceback()
         def execute_query():
             with connection.cursor() as cursor:
                 cursor.execute("SELECT 1")
@@ -81,7 +81,7 @@ class TestSqlStacktraceContextManager(TestCase):
 
         # Use with assertNumQueries
         with self.assertNumQueries(2):  # noqa: SIM117
-            with sql_stacktrace():
+            with sql_traceback():
                 # Execute two queries
                 with connection.cursor() as cursor:
                     cursor.execute("SELECT 1")
@@ -98,7 +98,7 @@ class TestSqlStacktraceContextManager(TestCase):
         connection.queries_log.clear()
 
         # Execute a query with the context manager
-        with sql_stacktrace(), self.assertNumQueries(1):  # noqa: SIM117
+        with sql_traceback(), self.assertNumQueries(1):  # noqa: SIM117
             with connection.cursor() as cursor:
                 cursor.execute("SELECT 1")
 
@@ -113,14 +113,14 @@ class TestSqlStacktraceContextManager(TestCase):
         # Verify test code is included
         self.assertIn("test_context_manager.py", sql_with_stacktrace)
 
-    @mock.patch.dict("os.environ", {"ENABLE_SQL_STACKTRACE": "0"})
+    @mock.patch.dict("os.environ", {"ENABLE_SQL_TRACEBACK": "0"})
     def test_disabled_via_environment_variable(self):
-        """Test that the context manager respects the ENABLE_SQL_STACKTRACE environment variable."""
+        """Test that the context manager respects the ENABLE_SQL_TRACEBACK environment variable."""
         # Clear the queries log
         connection.queries_log.clear()
 
         # Execute a query with the context manager, but with stacktraces disabled
-        with sql_stacktrace(), self.assertNumQueries(1):  # noqa: SIM117
+        with sql_traceback(), self.assertNumQueries(1):  # noqa: SIM117
             with connection.cursor() as cursor:
                 cursor.execute("SELECT 1")
 
@@ -133,8 +133,8 @@ class TestSqlStacktraceContextManager(TestCase):
         connection.queries_log.clear()
 
         # Execute a query with nested context managers
-        with sql_stacktrace():  # noqa: SIM117
-            with sql_stacktrace():
+        with sql_traceback():  # noqa: SIM117
+            with sql_traceback():
                 with connection.cursor() as cursor:
                     cursor.execute("SELECT 1")
 

@@ -16,17 +16,17 @@ This can help figuring out where are queries getting triggered from, for example
 ### As a Context Manager
 
 ```python
-from sql_pythonstack import sql_stacktrace, SqlStacktrace
+from sql_traceback import sql_traceback, SqlTraceback
 
 # Function-based style
-with sql_stacktrace():
+with sql_traceback():
     # Queries here will have stacktraces added
     user = User.objects.select_related('profile').get(id=1)
     user.profile.do_a_thing()
 
 # or
 
-with SqlStacktrace():
+with SqlTraceback():
     # Queries here will have stacktraces added
     user = User.objects.select_related('profile').get(id=1)
     user.profile.do_a_thing()
@@ -38,11 +38,11 @@ My preferred usecase as this will print out the location of the n+1 query (if th
 
 ```python
 from django.test import TestCase
-from sql_pythonstack import sql_stacktrace
+from sql_traceback import sql_traceback
 
 class MyTest(TestCase):
     def test_something(self):
-        with sql_stacktrace(), self.assertNumQueries(1):
+        with sql_traceback(), self.assertNumQueries(1):
             user = User.objects.select_related('profile').get(id=1)
             user.profile.do_a_thing()
 ```
@@ -50,9 +50,9 @@ class MyTest(TestCase):
 ### As a Decorator
 
 ```python
-from sql_pythonstack import SqlStacktrace
+from sql_traceback import SqlTraceback
 
-@SqlStacktrace()
+@SqlTraceback()
 def get_active_users():
     return User.objects.filter(is_active=True)
 ```
@@ -72,8 +72,8 @@ STACKTRACE:
 
 The context manager behavior can be controlled through environment variables:
 
-- `ENABLE_SQL_STACKTRACE=1` - Enable/disable stacktrace generation (default: enabled)
-- `PRINT_SQL_STACKTRACES=1` - Print stacktraces to stderr during tests (default: disabled)
+- `ENABLE_SQL_TRACEBACK=1` - Enable/disable stacktrace generation (default: enabled)
+- `PRINT_SQL_TRACEBACKS=1` - Print stacktraces to stderr during tests (default: disabled)
 
 ## Development
 

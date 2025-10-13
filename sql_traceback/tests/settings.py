@@ -16,6 +16,8 @@ INSTALLED_APPS = [
     "django.contrib.contenttypes",
 ]
 
+USE_TZ = True
+
 MIDDLEWARE = [
     "django.middleware.common.CommonMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
@@ -36,7 +38,7 @@ if DB_ENGINE == "postgres":
     DATABASES = {
         "default": {
             "ENGINE": "django.db.backends.postgresql",
-            "NAME": DB_NAME or "django_sql_pythonstack_test",
+            "NAME": DB_NAME or "django_traceback_in_sql_test",
             "USER": DB_USER or "testuser",
             "PASSWORD": DB_PASSWORD or "testpass",
             "HOST": DB_HOST or "localhost",
@@ -47,7 +49,7 @@ elif DB_ENGINE == "mysql":
     DATABASES = {
         "default": {
             "ENGINE": "django.db.backends.mysql",
-            "NAME": DB_NAME or "django_sql_pythonstack_test",
+            "NAME": DB_NAME or "django_traceback_in_sql_test",
             "USER": DB_USER or "testuser",
             "PASSWORD": DB_PASSWORD or "testpass",
             "HOST": DB_HOST or "localhost",

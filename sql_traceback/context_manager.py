@@ -6,9 +6,9 @@ originate from in the application code. Useful for debugging N+1 query
 issues and other SQL performance problems.
 
 Example:
-    from common.sql_stacktrace import sql_stacktrace
+    from common.sql_traceback import sql_traceback
 
-    with sql_stacktrace():
+    with sql_traceback():
         # Any SQL queries here will have stacktraces added
         users = User.objects.filter(is_active=True)
 """
@@ -24,14 +24,14 @@ from typing import Any, Protocol, TypeVar
 from django.db import connection
 from django.db.backends.utils import CursorDebugWrapper, CursorWrapper
 
-__all__ = ["sql_stacktrace", "SqlStacktrace"]
+__all__ = ["sql_traceback", "SqlTraceback"]
 
 # Default values for environment flags
-DEFAULT_ENABLE_SQL_STACKTRACE = "1"
-DEFAULT_PRINT_SQL_STACKTRACES = "0"
+DEFAULT_ENABLE_SQL_TRACEBACK = "1"
+DEFAULT_PRINT_SQL_TRACEBACKS = "0"
 
 # Flag to enable printing stacktraces to stderr during tests (default: disabled)
-PRINT_SQL_STACKTRACES = os.environ.get("PRINT_SQL_STACKTRACES", DEFAULT_PRINT_SQL_STACKTRACES).lower() in (
+PRINT_SQL_TRACEBACKS = os.environ.get("PRINT_SQL_TRACEBACKS", DEFAULT_PRINT_SQL_TRACEBACKS).lower() in (
     "1",
     "true",
     "yes",
@@ -63,7 +63,7 @@ def add_stacktrace_to_query(sql: str) -> str:
         The SQL query with a stacktrace comment appended
     """
     # Check environment variable at runtime to allow test patching
-    enable_stacktrace = os.environ.get("ENABLE_SQL_STACKTRACE", DEFAULT_ENABLE_SQL_STACKTRACE).lower() in (
+    enable_stacktrace = os.environ.get("ENABLE_SQL_TRACEBACK", DEFAULT_ENABLE_SQL_TRACEBACK).lower() in (
         "1",
         "true",
         "yes",
@@ -155,17 +155,17 @@ class StacktraceDebugCursorWrapper(CursorDebugWrapper):
 
 
 @contextlib.contextmanager
-def sql_stacktrace():
+def sql_traceback():
     """Context manager that adds Python stacktraces to SQL queries.
 
     This helps with debugging by making it easier to trace where SQL queries originate from
     in the application code. Works with both direct SQL execution and ORM queries.
 
     Examples:
-        >>> from common.sql_stacktrace import sql_stacktrace
+        >>> from common.sql_traceback import sql_traceback
         >>>
         >>> # Use with ORM queries
-        >>> with sql_stacktrace():
+        >>> with sql_traceback():
         >>>     users = User.objects.filter(is_active=True)
         >>>
         >>> # Use with tests and assertNumQueries
@@ -173,7 +173,7 @@ def sql_stacktrace():
         >>>
         >>> class MyTest(TestCase):
         >>>     def test_something(self):
-        >>>         with sql_stacktrace(), self.assertNumQueries(1):
+        >>>         with sql_traceback(), self.assertNumQueries(1):
         >>>             User.objects.first()
     """
     # Save original cursor method
@@ -198,20 +198,20 @@ def sql_stacktrace():
         connection.cursor = original_cursor  # pyright: ignore[reportGeneralTypeIssues]
 
 
-class SqlStacktrace:
-    """Class-based version of sql_stacktrace context manager.
+class SqlTraceback:
+    """Class-based version of sql_traceback context manager.
 
     Can be used as a context manager or decorator.
 
     Examples:
-        >>> from common.sql_stacktrace import SqlStacktrace
+        >>> from common.sql_traceback import SqlTraceback
         >>>
         >>> # As context manager
-        >>> with SqlStacktrace():
+        >>> with SqlTraceback():
         >>>     User.objects.all()
         >>>
         >>> # As decorator
-        >>> @SqlStacktrace()
+        >>> @SqlTraceback()
         >>> def my_function():
         >>>     return User.objects.all()
     """
