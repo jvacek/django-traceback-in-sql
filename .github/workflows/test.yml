@@ -1,0 +1,92 @@
+name: Test Suite
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+
+jobs:
+  test:
+    name: py${{ matrix.python-version }}-dj${{ matrix.django-version }}-${{ matrix.database }}
+    runs-on: ubuntu-latest
+
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.10", "3.11", "3.12", "3.13"]
+        django-version: ["42", "52"]
+        database: [sqlite, postgres, mysql]
+        exclude:
+          # Python 3.13 is only supported in Django 5.2+
+          - python-version: "3.13"
+            django-version: "42"
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: django_sql_pythonstack_test
+          POSTGRES_USER: testuser
+          POSTGRES_PASSWORD: testpass
+        options: >-
+          --health-cmd "pg_isready -U testuser -d django_sql_pythonstack_test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_DATABASE: django_sql_pythonstack_test
+          MYSQL_USER: testuser
+          MYSQL_PASSWORD: testpass
+          MYSQL_ROOT_PASSWORD: rootpass
+        options: >-
+          --health-cmd "mysqladmin ping -h localhost -utestuser -ptestpass"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 3306:3306
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install UV
+        uses: astral-sh/setup-uv@v4
+        with:
+          enable-cache: true
+
+      - name: Install system dependencies for MySQL
+        if: matrix.database == 'mysql'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libmysqlclient-dev pkg-config
+
+      - name: Install tox
+        run: |
+          uv pip install --system tox tox-gh-actions
+
+      - name: Run tests with tox
+        run: |
+          tox -e py${{ matrix.python-version }}-django${{ matrix.django-version }}-${{ matrix.database }}
+        env:
+          DB_HOST: localhost
+
+      - name: Upload coverage reports
+        if: matrix.python-version == '3.12' && matrix.django-version == '52' && matrix.database == 'sqlite'
+        uses: codecov/codecov-action@v4
+        with:
+          files: ./coverage.xml
+          flags: unittests
+          name: codecov-umbrella
+          fail_ci_if_error: false
