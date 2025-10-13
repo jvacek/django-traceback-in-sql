@@ -1,0 +1,34 @@
+[project]
+name = "django-sql-pythontrace"
+version = "0.1.0"
+description = "Contextmanager for annotation the relevant stack trace to SQL queries as a comment"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+  "django>=4.2.0",
+]
+
+[dependency-groups]
+dev = [
+  "basedpyright>=1.31.7",
+  "psycopg>=3.1.8",
+  "pytest>=8.3.5",
+  "pytest-django>=4.11.1",
+  "ruff==0.13.3",
+]
+
+[build-system]
+requires = ["uv_build>=0.8.22,<0.9.0"]
+build-backend = "uv_build"
+
+[tool.pytest.ini_options]
+addopts = "--showlocals"
+pythonpath = ["."]
+DJANGO_SETTINGS_MODULE = "sql_pythonstack.tests.settings"
+
+[tool.ruff]
+line-length = 120
+
+[tool.uv.build-backend]
+module-name = "sql_pythonstack"
+module-root = ""
