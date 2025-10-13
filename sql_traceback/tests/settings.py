@@ -56,6 +56,12 @@ elif DB_ENGINE == "mysql":
             "PORT": DB_PORT or "3306",
             "OPTIONS": {
                 "charset": "utf8mb4",
+                "sql_mode": "TRADITIONAL,NO_AUTO_VALUE_ON_ZERO",
+                "init_command": "SET default_storage_engine=INNODB",
+            },
+            "TEST": {
+                "CHARSET": "utf8mb4",
+                "COLLATION": "utf8mb4_unicode_ci",
             },
         }
     }
@@ -66,3 +72,29 @@ else:  # sqlite
             "NAME": DB_NAME or ":memory:",
         }
     }
+
+    # Add logging to help debug database connection issues
+    LOGGING = {
+        "version": 1,
+        "disable_existing_loggers": False,
+        "handlers": {
+            "console": {
+                "class": "logging.StreamHandler",
+            },
+        },
+        "loggers": {
+            "django.db.backends": {
+                "level": "DEBUG" if os.environ.get("DEBUG_DB") else "WARNING",
+                "handlers": ["console"],
+            },
+            "django.db.backends.schema": {
+                "level": "DEBUG" if os.environ.get("DEBUG_DB") else "WARNING",
+                "handlers": ["console"],
+            },
+        },
+    }
+
+    # Print database configuration for debugging
+    if os.environ.get("DEBUG_DB"):
+        print(f"Database configuration: ENGINE={DB_ENGINE}, HOST={DB_HOST}, NAME={DB_NAME}")
+        print(f"Database config: {DATABASES}")
