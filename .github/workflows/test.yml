@@ -79,7 +79,10 @@ jobs:
       - name: Verify MySQL setup
         if: matrix.database == 'mysql'
         run: |
-          mysql -h localhost -P 3306 -u testuser -ptestpass -e "SHOW DATABASES;" | grep django_traceback_in_sql_test
+          # Wait for MySQL to be fully ready and test connection
+          timeout 30 bash -c 'until mysql -h localhost -P 3306 --protocol=TCP -u testuser -ptestpass --connect-timeout=5 -e "SELECT 1;" > /dev/null 2>&1; do sleep 2; done'
+          # Verify the test database exists
+          mysql -h localhost -P 3306 --protocol=TCP -u testuser -ptestpass -e "SHOW DATABASES;" | grep django_traceback_in_sql_test
 
       - name: Run tests with tox
         run: |
