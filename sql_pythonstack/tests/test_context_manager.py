@@ -141,3 +141,24 @@ class TestSqlStacktraceContextManager(TestCase):
         # Check that only one stacktrace comment was added
         sql = connection.queries[0]["sql"]
         self.assertEqual(sql.count("STACKTRACE:"), 1)
+
+    def test_database_backend_identification(self):
+        """Test that we can identify which database backend is being used."""
+        import os
+
+        db_engine = os.environ.get("DB_ENGINE", "sqlite")
+        db_vendor = connection.vendor
+
+        # Verify the correct database backend is being used
+        if db_engine == "postgres":
+            self.assertEqual(db_vendor, "postgresql")
+        elif db_engine == "mysql":
+            self.assertEqual(db_vendor, "mysql")
+        else:  # sqlite
+            self.assertEqual(db_vendor, "sqlite")
+
+        # Execute a simple query to verify the connection works
+        with connection.cursor() as cursor:
+            cursor.execute("SELECT 1")
+            result = cursor.fetchone()
+            self.assertEqual(result[0], 1)

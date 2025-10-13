@@ -74,3 +74,77 @@ The context manager behavior can be controlled through environment variables:
 
 - `ENABLE_SQL_STACKTRACE=1` - Enable/disable stacktrace generation (default: enabled)
 - `PRINT_SQL_STACKTRACES=1` - Print stacktraces to stderr during tests (default: disabled)
+
+## Development
+
+### Running Tests
+
+This project uses **tox** to test against multiple database backends (SQLite, PostgreSQL, MySQL) and multiple Python versions (3.10, 3.11, 3.12, 3.13).
+
+**📚 For detailed testing documentation, see [TESTING.md](TESTING.md)**
+**🚀 For quick setup instructions, see [QUICKSTART.md](QUICKSTART.md)**
+
+#### Quick Start
+
+```bash
+# Build test container (one-time setup)
+make build
+
+# Start database containers
+make up
+
+# Run all tests (21 environments)
+make test
+
+# Or test specific combinations
+make test TOX_ENV=py312-django52-sqlite
+make test TOX_ENV=py312-django52-postgres
+make test TOX_ENV=py310-django42-mysql
+```
+
+#### No Local Dependencies Needed!
+
+All tests run inside Docker with UV managing multiple Python versions and tox handling test environments. Database drivers (psycopg, mysqlclient) are pre-installed in the container.
+
+#### Test Specific Combinations
+
+```bash
+# Single environment
+make test TOX_ENV=py312-django52-postgres
+make test TOX_ENV=py313-django52-mysql
+
+# Multiple environments
+make test TOX_ENV="py312-django{42,52}-sqlite"
+
+# All Django 5.2 environments
+make test TOX_ENV="py{310,311,312,313}-django52-{sqlite,postgres,mysql}"
+
+# See all available environments
+docker-compose run --rm test tox list
+```
+
+#### Available Commands
+
+```bash
+make help              # Show all available commands and examples
+make test              # Run all tests (21 environments)
+make test TOX_ENV=...  # Run specific environment(s)
+make build             # Build test container
+make up                # Start database containers
+make down              # Stop containers
+make clean             # Remove containers and volumes
+make shell             # Open shell in test container
+```
+
+### CI/CD
+
+The project uses GitHub Actions with a test matrix covering:
+
+- **Python versions**: 3.10, 3.11, 3.12, 3.13
+- **Django versions**: 4.2 LTS, 5.2 LTS
+- **Databases**: SQLite, PostgreSQL, MySQL
+- **Total**: 21 test combinations run in parallel
+
+The CI uses the same Docker + tox setup as local development, ensuring consistency.
+
+See the [GitHub Actions workflow](.github/workflows/test.yml) for implementation details.
