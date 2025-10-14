@@ -24,7 +24,7 @@ class MyTest(TestCase):
                 print(user.profile.name)
 ```
 
-If the assert gets triggered, you will see the following output:
+If the assert gets triggered, you will see something like the following output:
 
 ```text
 AssertionError: 2 != 1 : Unexpected queries detected:
@@ -61,10 +61,23 @@ def get_users():
 Optional settings in your Django `settings.py`:
 
 ```python
-SQL_TRACEBACK_ENABLED = True              # Enable/disable (default: True)
-SQL_TRACEBACK_MAX_FRAMES = 15             # Stack depth (default: 15)
-SQL_TRACEBACK_FILTER_SITEPACKAGES = True  # Hide library frames (default: True)
+SQL_TRACEBACK_ENABLED = True                      # Enable/disable stacktracing (default: True)
+SQL_TRACEBACK_MAX_FRAMES = 15                     # Max number of stack frames (default: 15)
+SQL_TRACEBACK_FILTER_SITEPACKAGES = True          # Filter out third-party packages (default: True)
+SQL_TRACEBACK_FILTER_TESTING_FRAMEWORKS = True    # Filter out pytest/unittest frames (default: True)
+SQL_TRACEBACK_FILTER_STDLIB = True                # Filter out Python standard library frames (default: True)
+SQL_TRACEBACK_MIN_APP_FRAMES = 1                  # Minimum application frames required (default: 1)
 ```
+
+### Filtering Options
+
+The filtering options serve different purposes and can be used independently:
+
+- **`FILTER_SITEPACKAGES`**: Removes third-party library code (e.g., **django**, requests, pluggy, etc.)
+- **`FILTER_STDLIB`**: Removes Python built-in modules (e.g., threading, contextlib, etc.)
+- **`FILTER_TESTING_FRAMEWORKS`**: Removes test framework internals (pytest + unittest)
+
+The testing framework filter is useful because testing frameworks span both categories above, and you almost never want to see their internals when debugging SQL queries.
 
 ## Compatibility
 

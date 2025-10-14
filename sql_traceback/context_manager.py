@@ -23,9 +23,9 @@ Example:
 Configuration in settings.py:
     SQL_TRACEBACK_ENABLED = True  # Enable/disable stacktracing (default: True)
     SQL_TRACEBACK_MAX_FRAMES = 15  # Max number of stack frames (default: 15)
-    SQL_TRACEBACK_FILTER_SITEPACKAGES = True  # Filter out site-packages (default: True)
+    SQL_TRACEBACK_FILTER_SITEPACKAGES = True  # Filter out third-party packages (including django) (default: True)
     SQL_TRACEBACK_FILTER_TESTING_FRAMEWORKS = True  # Filter out pytest/unittest frames (default: True)
-    SQL_TRACEBACK_FILTER_STDLIB = True  # Filter out Python stdlib frames (default: True)
+    SQL_TRACEBACK_FILTER_STDLIB = True  # Filter out Python standard library frames (default: True)
     SQL_TRACEBACK_MIN_APP_FRAMES = 1  # Minimum application frames required (default: 1)
 """
 
@@ -81,44 +81,67 @@ def _should_include_frame(frame: traceback.FrameSummary) -> bool:
     """Determine if a stack frame should be included in the traceback."""
     filename_lower = frame.filename.lower()
 
-    # Always skip Django framework files
-    django_excludes = [
-        "django/db/",
-        "django/core/",
-        "django/contrib/",
-    ]
-
-    if any(exclude in filename_lower for exclude in django_excludes):
-        return False
-
     # Skip site-packages if filtering is enabled
     if FILTER_SITEPACKAGES and "site-packages/" in filename_lower:
         return False
 
+    # Skip Django framework code if filtering is enabled
+    if FILTER_SITEPACKAGES:
+        django_patterns = [
+            "/django/",
+            "\\django\\",  # Windows path separator
+        ]
+        if any(pattern in filename_lower for pattern in django_patterns):
+            return False
+
     # Skip Python standard library if filtering is enabled
     if FILTER_STDLIB:
-        # Only filter if it's clearly in the Python installation directory
+        # Filter Python standard library modules
         stdlib_patterns = [
             "/lib/python3.",
             "/lib64/python3.",
             "<frozen ",
             "/runpy.py",
+            "/threading.py",
+            "/queue.py",
+            "/contextlib.py",
+            "/functools.py",
+            "/traceback.py",
+            "/inspect.py",
+            "/importlib/",
+            "/collections/",
+            "/weakref.py",
+            "/copy.py",
+            "/logging/",
         ]
 
-        if any(pattern in filename_lower for pattern in stdlib_patterns):
+        # Check if it's a stdlib module (not in site-packages)
+        if "site-packages/" not in filename_lower and any(pattern in filename_lower for pattern in stdlib_patterns):
             return False
 
-    # Skip testing framework internals if filtering is enabled, but be selective
+    # Skip testing framework internals if filtering is enabled
+    # This is useful because testing frameworks span both third-party (pytest) and stdlib (unittest)
+    # and you almost never want to see their internals when debugging SQL queries
     if FILTER_TESTING_FRAMEWORKS:
-        # Only filter pytest/unittest internals, not user test files
-        testing_excludes = [
+        # Filter pytest internals (third-party)
+        pytest_excludes = [
             "_pytest/",
             "/pytest/",
+            "pytest_django/",
+            "/pluggy/",
+        ]
+
+        # Filter unittest internals (stdlib)
+        unittest_excludes = [
             "unittest/case.py",
             "unittest/loader.py",
             "unittest/runner.py",
             "unittest/suite.py",
+            "unittest/main.py",
         ]
+
+        # Combine all testing framework excludes
+        testing_excludes = pytest_excludes + unittest_excludes
 
         # Don't filter out user test files - only internal framework files
         if any(exclude in filename_lower for exclude in testing_excludes):
@@ -217,7 +240,10 @@ def sql_traceback():
     Django Settings:
         SQL_TRACEBACK_ENABLED: Enable/disable stacktracing (default: True)
         SQL_TRACEBACK_MAX_FRAMES: Max number of stack frames to include (default: 15)
-        SQL_TRACEBACK_FILTER_SITEPACKAGES: Filter out site-packages (default: True)
+        SQL_TRACEBACK_FILTER_SITEPACKAGES: Filter out third-party packages (including Django) (default: True)
+        SQL_TRACEBACK_FILTER_TESTING_FRAMEWORKS: Filter out pytest/unittest frames (default: True)
+        SQL_TRACEBACK_FILTER_STDLIB: Filter out Python standard library frames (default: True)
+        SQL_TRACEBACK_MIN_APP_FRAMES: Minimum application frames required (default: 1)
 
     Examples:
         >>> from sql_traceback import sql_traceback
@@ -265,9 +291,9 @@ class SqlTraceback:
     Django Settings:
         SQL_TRACEBACK_ENABLED: Enable/disable stacktracing (default: True)
         SQL_TRACEBACK_MAX_FRAMES: Max number of stack frames to include (default: 15)
-        SQL_TRACEBACK_FILTER_SITEPACKAGES: Filter out site-packages (default: True)
+        SQL_TRACEBACK_FILTER_SITEPACKAGES: Filter out third-party packages (including Django) (default: True)
         SQL_TRACEBACK_FILTER_TESTING_FRAMEWORKS: Filter out pytest/unittest frames (default: True)
-        SQL_TRACEBACK_FILTER_STDLIB: Filter out Python stdlib frames (default: True)
+        SQL_TRACEBACK_FILTER_STDLIB: Filter out Python standard library frames (default: True)
         SQL_TRACEBACK_MIN_APP_FRAMES: Minimum application frames required (default: 1)
 
     Examples:
