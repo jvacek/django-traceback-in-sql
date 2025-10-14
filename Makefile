@@ -56,8 +56,14 @@ shell: up
 
 test: up
 	@if [ -z "$(TOX_ENV)" ]; then \
-		docker-compose run --rm test tox; \
+		echo "Running all tests..."; \
+		docker-compose run --rm -e DB_HOST=postgres test tox -e "py{310,311,312}-django{42,52}-{sqlite,postgres}"; \
+		docker-compose run --rm -e DB_HOST=mysql test tox -e "py{310,311,312}-django42-mysql,py{310,311,312,313}-django52-mysql"; \
 	else \
 		echo "Running tox -e $(TOX_ENV)"; \
-		docker-compose run --rm test tox -e $(TOX_ENV); \
+		if echo "$(TOX_ENV)" | grep -q "mysql"; then \
+			docker-compose run --rm -e DB_HOST=mysql test tox -e "$(TOX_ENV)"; \
+		else \
+			docker-compose run --rm -e DB_HOST=postgres test tox -e "$(TOX_ENV)"; \
+		fi; \
 	fi
