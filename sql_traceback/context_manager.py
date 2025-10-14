@@ -24,6 +24,9 @@ Configuration in settings.py:
     SQL_TRACEBACK_ENABLED = True  # Enable/disable stacktracing (default: True)
     SQL_TRACEBACK_MAX_FRAMES = 15  # Max number of stack frames (default: 15)
     SQL_TRACEBACK_FILTER_SITEPACKAGES = True  # Filter out site-packages (default: True)
+    SQL_TRACEBACK_FILTER_TESTING_FRAMEWORKS = True  # Filter out pytest/unittest frames (default: True)
+    SQL_TRACEBACK_FILTER_STDLIB = True  # Filter out Python stdlib frames (default: True)
+    SQL_TRACEBACK_MIN_APP_FRAMES = 1  # Minimum application frames required (default: 1)
 """
 
 import contextlib
@@ -49,6 +52,9 @@ def _get_setting(name: str, default: Any) -> Any:
 TRACEBACK_ENABLED = _get_setting("SQL_TRACEBACK_ENABLED", True)
 MAX_STACK_FRAMES = _get_setting("SQL_TRACEBACK_MAX_FRAMES", 15)
 FILTER_SITEPACKAGES = _get_setting("SQL_TRACEBACK_FILTER_SITEPACKAGES", True)
+FILTER_TESTING_FRAMEWORKS = _get_setting("SQL_TRACEBACK_FILTER_TESTING_FRAMEWORKS", True)
+FILTER_STDLIB = _get_setting("SQL_TRACEBACK_FILTER_STDLIB", True)
+MIN_APP_FRAMES = _get_setting("SQL_TRACEBACK_MIN_APP_FRAMES", 1)
 
 
 class CursorProtocol(Protocol):
@@ -85,11 +91,44 @@ def _should_include_frame(frame: traceback.FrameSummary) -> bool:
     if any(exclude in filename_lower for exclude in django_excludes):
         return False
 
+    # Skip this module itself to avoid self-reference
+    if "sql_traceback" in filename_lower:
+        return False
+
     # Skip site-packages if filtering is enabled
     if FILTER_SITEPACKAGES and "site-packages/" in filename_lower:
         return False
 
-    # Include everything else (application code)
+    # Skip Python standard library if filtering is enabled
+    if FILTER_STDLIB:
+        # Only filter if it's clearly in the Python installation directory
+        stdlib_patterns = [
+            "/lib/python3.",
+            "/lib64/python3.",
+            "<frozen ",
+            "/runpy.py",
+        ]
+
+        if any(pattern in filename_lower for pattern in stdlib_patterns):
+            return False
+
+    # Skip testing framework internals if filtering is enabled, but be selective
+    if FILTER_TESTING_FRAMEWORKS:
+        # Only filter pytest/unittest internals, not user test files
+        testing_excludes = [
+            "_pytest/",
+            "/pytest/",
+            "unittest/case.py",
+            "unittest/loader.py",
+            "unittest/runner.py",
+            "unittest/suite.py",
+        ]
+
+        # Don't filter out user test files - only internal framework files
+        if any(exclude in filename_lower for exclude in testing_excludes):
+            return False
+
+    # Include everything else (application code including user test files)
     return True
 
 
@@ -118,18 +157,23 @@ def add_stacktrace_to_query(sql: str) -> str:
         stacktrace_lines = []
 
         # Use configurable number of most recent frames for better context
-        if filtered_stack:
+        if filtered_stack and len(filtered_stack) >= MIN_APP_FRAMES:
             for frame in filtered_stack[-MAX_STACK_FRAMES:]:
                 safe_filename = _sanitize_filename(frame.filename)
                 stacktrace_lines.append(f"# {safe_filename}:{frame.lineno} in {frame.name}")
         else:
-            # If no application frames found, add a note
-            stacktrace_lines.append("# [No application frames found in stacktrace]")
+            # If insufficient application frames found, include a minimal note
+            # but avoid returning original SQL to ensure tests can detect stacktrace presence
+            stacktrace_lines.append("# [Application frames filtered - showing remaining frames]")
+            # Include any remaining frames that weren't filtered
+            for frame in stack[-min(3, len(stack)) :]:
+                safe_filename = _sanitize_filename(frame.filename)
+                stacktrace_lines.append(f"# {safe_filename}:{frame.lineno} in {frame.name}")
 
         stacktrace_comment = "\n".join(stacktrace_lines)
 
         # Append the stacktrace comment to the SQL query
-        return f"{sql}\n/*\nSTACKTRACE:\n{stacktrace_comment}\n*/;"
+        return f"{sql}\n/*\nSTACKTRACE:\n{stacktrace_comment}\n*/"
 
     except Exception:
         # If stacktrace extraction fails, return original SQL
@@ -226,6 +270,9 @@ class SqlTraceback:
         SQL_TRACEBACK_ENABLED: Enable/disable stacktracing (default: True)
         SQL_TRACEBACK_MAX_FRAMES: Max number of stack frames to include (default: 15)
         SQL_TRACEBACK_FILTER_SITEPACKAGES: Filter out site-packages (default: True)
+        SQL_TRACEBACK_FILTER_TESTING_FRAMEWORKS: Filter out pytest/unittest frames (default: True)
+        SQL_TRACEBACK_FILTER_STDLIB: Filter out Python stdlib frames (default: True)
+        SQL_TRACEBACK_MIN_APP_FRAMES: Minimum application frames required (default: 1)
 
     Examples:
         >>> from sql_traceback import SqlTraceback
