@@ -1,9 +1,10 @@
 [project]
 name = "django-traceback-in-sql"
-version = "0.1.0"
+version = "0.1.1rc1"
 description = "Contextmanager for annotation the relevant stack trace to SQL queries as a comment"
 readme = "README.md"
 requires-python = ">=3.10"
+authors = [{ name = "Jonas Vacek" }]
 keywords = ["debugging", "django", "sql", "traceback"]
 classifiers = [
   "Framework :: Django",
