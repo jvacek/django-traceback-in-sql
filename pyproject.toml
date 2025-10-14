@@ -4,9 +4,23 @@ version = "0.1.0"
 description = "Contextmanager for annotation the relevant stack trace to SQL queries as a comment"
 readme = "README.md"
 requires-python = ">=3.10"
+keywords = ["debugging", "django", "sql", "traceback"]
+classifiers = [
+  "Framework :: Django",
+  "Framework :: Django :: 4.2",
+  "Framework :: Django :: 5.2",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Topic :: Utilities",
+]
 dependencies = [
   "django>=4.2.0",
 ]
+
+[project.urls]
+Repository = "https://github.com/jvacek/django-traceback-in-sql"
 
 [dependency-groups]
 dev = [
