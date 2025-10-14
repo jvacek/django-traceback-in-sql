@@ -161,9 +161,9 @@ class TestSettingsConfiguration(TestCase):
         """Test that defaults work when settings are missing."""
         # Test that the current settings match expected defaults
         from sql_traceback.context_manager import (
-            TRACEBACK_ENABLED,
-            MAX_STACK_FRAMES,
             FILTER_SITEPACKAGES,
+            MAX_STACK_FRAMES,
+            TRACEBACK_ENABLED,
         )
 
         # Should use defaults (these are the actual defaults from the module)
@@ -335,4 +335,5 @@ class TestEnvironmentIntegration(TestCase):
         with connection.cursor() as cursor:
             cursor.execute("SELECT 1")
             result = cursor.fetchone()
-            self.assertEqual(result[0], 1)
+            self.assertIsNotNone(result, "Query result should not be None")
+            self.assertEqual(result[0], 1)  # pyright: ignore[reportOptionalSubscript]
