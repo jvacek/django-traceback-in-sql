@@ -80,9 +80,7 @@ jobs:
         if: matrix.database == 'mysql'
         run: |
           # Wait for MySQL to be fully ready and test connection
-          timeout 30 bash -c 'until mysql -h 127.0.0.1 -P ${{ job.services.mysql.ports['3306'] }} --protocol=TCP -u testuser -ptestpass --connect-timeout=5 -e "SELECT 1;" > /dev/null 2>&1; do sleep 2; done'
-          # Verify the test database exists
-          mysql -h 127.0.0.1 -P ${{ job.services.mysql.ports['3306'] }} --protocol=TCP -u testuser -ptestpass -e "SHOW DATABASES;" | grep django_traceback_in_sql_test
+          timeout 30 bash -c 'until mysql -h 127.0.0.1 -P ${{ job.services.mysql.ports['3306'] }} --protocol=TCP -u root -prootpass --connect-timeout=5 -e "SELECT 1;" > /dev/null 2>&1; do sleep 2; done'
 
       - name: Run tests with tox
         run: |
@@ -90,6 +88,8 @@ jobs:
         env:
           DB_HOST: 127.0.0.1
           DB_PORT: ${{ matrix.database == 'postgres' && job.services.postgres.ports['5432'] || matrix.database == 'mysql' && job.services.mysql.ports['3306'] || '' }}
+          DB_USER: ${{ matrix.database == 'mysql' && 'root' || 'testuser' }}
+          DB_PASSWORD: ${{ matrix.database == 'mysql' && 'rootpass' || 'testpass' }}
 
       - name: Upload coverage reports
         if: matrix.python-version == '3.12' && matrix.django-version == '52' && matrix.database == 'sqlite'
