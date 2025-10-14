@@ -9,7 +9,6 @@ services:
       - tox-cache:/app/.tox
     environment:
       DB_HOST: postgres
-      DB_HOST_MYSQL: mysql
     depends_on:
       postgres:
         condition: service_healthy

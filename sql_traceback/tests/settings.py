@@ -52,7 +52,7 @@ elif DB_ENGINE == "mysql":
             "NAME": DB_NAME or "django_traceback_in_sql_test",
             "USER": DB_USER or "testuser",
             "PASSWORD": DB_PASSWORD or "testpass",
-            "HOST": DB_HOST or "localhost",
+            "HOST": DB_HOST or "127.0.0.1",  # Use 127.0.0.1 instead of localhost to force TCP
             "PORT": DB_PORT or "3306",
             "OPTIONS": {
                 "charset": "utf8mb4",
