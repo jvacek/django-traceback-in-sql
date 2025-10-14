@@ -1,6 +1,6 @@
 [project]
 name = "django-traceback-in-sql"
-version = "0.1.2"
+version = "0.2.0"
 description = "Contextmanager for annotation the relevant stack trace to SQL queries as a comment"
 readme = "README.md"
 requires-python = ">=3.10"
