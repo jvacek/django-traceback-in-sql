@@ -91,10 +91,6 @@ def _should_include_frame(frame: traceback.FrameSummary) -> bool:
     if any(exclude in filename_lower for exclude in django_excludes):
         return False
 
-    # Skip this module itself to avoid self-reference
-    if "sql_traceback" in filename_lower:
-        return False
-
     # Skip site-packages if filtering is enabled
     if FILTER_SITEPACKAGES and "site-packages/" in filename_lower:
         return False
