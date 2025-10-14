@@ -6,41 +6,49 @@ originate from in the application code. Useful for debugging N+1 query
 issues and other SQL performance problems.
 
 Example:
-    from common.sql_traceback import sql_traceback
+    from sql_traceback import sql_traceback
 
     with sql_traceback():
         # Any SQL queries here will have stacktraces added
         users = User.objects.filter(is_active=True)
+
+    # The generated SQL will include a comment like:
+    # SELECT * FROM users WHERE is_active = true
+    # /*
+    # STACKTRACE:
+    # # /app/views.py:25 in get_active_users
+    # # /app/services/user_service.py:42 in fetch_users
+    # */
+
+Configuration in settings.py:
+    SQL_TRACEBACK_ENABLED = True  # Enable/disable stacktracing (default: True)
+    SQL_TRACEBACK_MAX_FRAMES = 15  # Max number of stack frames (default: 15)
+    SQL_TRACEBACK_FILTER_SITEPACKAGES = True  # Filter out site-packages (default: True)
 """
 
 import contextlib
 import functools
-import os
 import traceback
 import types
 from collections.abc import Callable
-from typing import Any, Protocol, TypeVar
+from typing import Any, Protocol
 
+from django.conf import settings
 from django.db import connection
 from django.db.backends.utils import CursorDebugWrapper, CursorWrapper
 
 __all__ = ["sql_traceback", "SqlTraceback"]
 
-# Default values for environment flags
-DEFAULT_ENABLE_SQL_TRACEBACK = "1"
-DEFAULT_PRINT_SQL_TRACEBACKS = "0"
 
-# Flag to enable printing stacktraces to stderr during tests (default: disabled)
-PRINT_SQL_TRACEBACKS = os.environ.get("PRINT_SQL_TRACEBACKS", DEFAULT_PRINT_SQL_TRACEBACKS).lower() in (
-    "1",
-    "true",
-    "yes",
-    "y",
-)
+# Configuration from Django settings with defaults
+def _get_setting(name: str, default: Any) -> Any:
+    """Get a setting value with a default fallback."""
+    return getattr(settings, name, default)
 
-# Type variables for better type hints
-T = TypeVar("T")
-ExecuteFunc = Callable[[str, Any, bool, dict[str, Any]], Any]
+
+TRACEBACK_ENABLED = _get_setting("SQL_TRACEBACK_ENABLED", True)
+MAX_STACK_FRAMES = _get_setting("SQL_TRACEBACK_MAX_FRAMES", 15)
+FILTER_SITEPACKAGES = _get_setting("SQL_TRACEBACK_FILTER_SITEPACKAGES", True)
 
 
 class CursorProtocol(Protocol):
@@ -53,6 +61,38 @@ class CursorProtocol(Protocol):
     def fetchall(self) -> list[Any]: ...
 
 
+def _is_stacktrace_enabled() -> bool:
+    """Check if stacktrace is enabled via Django settings."""
+    return bool(TRACEBACK_ENABLED)
+
+
+def _sanitize_filename(filename: str) -> str:
+    """Sanitize filename to prevent any potential SQL comment issues."""
+    return filename.replace("*/", "").replace("/*", "").replace("\n", "").replace("\r", "")
+
+
+def _should_include_frame(frame: traceback.FrameSummary) -> bool:
+    """Determine if a stack frame should be included in the traceback."""
+    filename_lower = frame.filename.lower()
+
+    # Always skip Django framework files
+    django_excludes = [
+        "django/db/",
+        "django/core/",
+        "django/contrib/",
+    ]
+
+    if any(exclude in filename_lower for exclude in django_excludes):
+        return False
+
+    # Skip site-packages if filtering is enabled
+    if FILTER_SITEPACKAGES and "site-packages/" in filename_lower:
+        return False
+
+    # Include everything else (application code)
+    return True
+
+
 def add_stacktrace_to_query(sql: str) -> str:
     """Add the current Python stacktrace to a SQL query as a comment.
 
@@ -60,68 +100,41 @@ def add_stacktrace_to_query(sql: str) -> str:
         sql: The original SQL query string
 
     Returns:
-        The SQL query with a stacktrace comment appended
+        The SQL query with a stacktrace comment appended, or the original
+        SQL if stacktracing is disabled or already present.
     """
-    # Check environment variable at runtime to allow test patching
-    enable_stacktrace = os.environ.get("ENABLE_SQL_TRACEBACK", DEFAULT_ENABLE_SQL_TRACEBACK).lower() in (
-        "1",
-        "true",
-        "yes",
-    )
-
-    # Skip if disabled
-    if not enable_stacktrace:
+    # Early return if disabled or already has stacktrace
+    if not _is_stacktrace_enabled() or "/*\nSTACKTRACE:" in sql:
         return sql
 
-    # Check if the SQL already has a stacktrace to avoid adding it twice
-    if "/*\nSTACKTRACE:" in sql:
+    try:
+        # Get the current stacktrace
+        stack = traceback.extract_stack()
+
+        # Filter out framework and library calls to focus on application code
+        filtered_stack = [frame for frame in stack if _should_include_frame(frame)]
+
+        # Format the stacktrace into a SQL comment
+        stacktrace_lines = []
+
+        # Use configurable number of most recent frames for better context
+        if filtered_stack:
+            for frame in filtered_stack[-MAX_STACK_FRAMES:]:
+                safe_filename = _sanitize_filename(frame.filename)
+                stacktrace_lines.append(f"# {safe_filename}:{frame.lineno} in {frame.name}")
+        else:
+            # If no application frames found, add a note
+            stacktrace_lines.append("# [No application frames found in stacktrace]")
+
+        stacktrace_comment = "\n".join(stacktrace_lines)
+
+        # Append the stacktrace comment to the SQL query
+        return f"{sql}\n/*\nSTACKTRACE:\n{stacktrace_comment}\n*/;"
+
+    except Exception:
+        # If stacktrace extraction fails, return original SQL
+        # Silently fail to avoid breaking the application
         return sql
-
-    # Get the current stacktrace
-    stack = traceback.extract_stack()
-
-    # Filter out framework and library calls to focus on application code
-    filtered_stack = []
-    for frame in stack:
-        # Skip common framework files
-        if any(
-            exclude in frame.filename.lower()
-            for exclude in [
-                "django/db/",
-                "django/core/",
-                "django/contrib/",
-                "site-packages/",
-                "/lib/python",
-                "middleware.py",
-                "/db.py",
-            ]
-        ):
-            continue
-
-        # Include application code and test files
-        if (
-            "test_" in frame.filename
-            or "/usermanagement/" in frame.filename
-            or not any(exclude in frame.filename.lower() for exclude in ["django", "site-packages"])
-        ):
-            filtered_stack.append(frame)
-
-    # Format the stacktrace into a SQL comment
-    stacktrace_lines = []
-
-    # Use a more compact format for the stacktrace
-    if filtered_stack:
-        # Take up to 15 most recent frames for better context
-        for frame in filtered_stack[-15:]:
-            stacktrace_lines.append(f"# {frame.filename}:{frame.lineno} in {frame.name}")
-    else:
-        # If no application frames found, add a note
-        stacktrace_lines.append("# [No application frames found in stacktrace]")
-
-    stacktrace_comment = "\n".join(stacktrace_lines)
-
-    # Append the stacktrace comment to the SQL query
-    return f"{sql}\n/*\nSTACKTRACE:\n{stacktrace_comment}\n*/;"
 
 
 class StacktraceCursorWrapper(CursorWrapper):
@@ -131,12 +144,12 @@ class StacktraceCursorWrapper(CursorWrapper):
         super().__init__(cursor, db)  # pyright: ignore[reportArgumentType]
 
     def execute(self, sql: str, params: Any = None) -> Any:
-        sql = add_stacktrace_to_query(sql)
-        return super().execute(sql, params)
+        modified_sql = add_stacktrace_to_query(sql)
+        return super().execute(modified_sql, params)
 
     def executemany(self, sql: str, param_list: list[Any]) -> Any:
-        sql = add_stacktrace_to_query(sql)
-        return super().executemany(sql, param_list)
+        modified_sql = add_stacktrace_to_query(sql)
+        return super().executemany(modified_sql, param_list)
 
 
 class StacktraceDebugCursorWrapper(CursorDebugWrapper):
@@ -150,8 +163,8 @@ class StacktraceDebugCursorWrapper(CursorDebugWrapper):
         return super().execute(modified_sql, params)
 
     def executemany(self, sql: str, param_list: list[Any]) -> Any:
-        sql = add_stacktrace_to_query(sql)
-        return super().executemany(sql, param_list)
+        modified_sql = add_stacktrace_to_query(sql)
+        return super().executemany(modified_sql, param_list)
 
 
 @contextlib.contextmanager
@@ -161,8 +174,13 @@ def sql_traceback():
     This helps with debugging by making it easier to trace where SQL queries originate from
     in the application code. Works with both direct SQL execution and ORM queries.
 
+    Django Settings:
+        SQL_TRACEBACK_ENABLED: Enable/disable stacktracing (default: True)
+        SQL_TRACEBACK_MAX_FRAMES: Max number of stack frames to include (default: 15)
+        SQL_TRACEBACK_FILTER_SITEPACKAGES: Filter out site-packages (default: True)
+
     Examples:
-        >>> from common.sql_traceback import sql_traceback
+        >>> from sql_traceback import sql_traceback
         >>>
         >>> # Use with ORM queries
         >>> with sql_traceback():
@@ -201,10 +219,16 @@ def sql_traceback():
 class SqlTraceback:
     """Class-based version of sql_traceback context manager.
 
-    Can be used as a context manager or decorator.
+    Can be used as a context manager or decorator. Provides the same functionality
+    as the sql_traceback function but with a class-based interface.
+
+    Django Settings:
+        SQL_TRACEBACK_ENABLED: Enable/disable stacktracing (default: True)
+        SQL_TRACEBACK_MAX_FRAMES: Max number of stack frames to include (default: 15)
+        SQL_TRACEBACK_FILTER_SITEPACKAGES: Filter out site-packages (default: True)
 
     Examples:
-        >>> from common.sql_traceback import SqlTraceback
+        >>> from sql_traceback import SqlTraceback
         >>>
         >>> # As context manager
         >>> with SqlTraceback():
@@ -224,7 +248,6 @@ class SqlTraceback:
         self._original_cursor = connection.cursor
 
         # Define patched cursor method
-        @functools.wraps(self._original_cursor)
         def cursor_with_stacktrace(*args: Any, **kwargs: Any) -> Any:
             if self._original_cursor is None:
                 return connection.cursor(*args, **kwargs)
@@ -246,15 +269,20 @@ class SqlTraceback:
         exc_val: BaseException | None,
         exc_tb: types.TracebackType | None,
     ) -> bool:
-        # Restore original cursor method
-        if self._original_cursor is not None:
-            connection.cursor = self._original_cursor  # pyright: ignore[reportGeneralTypeIssues]
+        # Restore original cursor method even if an exception occurred
+        try:
+            if hasattr(self, "_original_cursor") and self._original_cursor is not None:
+                connection.cursor = self._original_cursor  # pyright: ignore[reportGeneralTypeIssues]
+        finally:
+            # Always reset the stored reference
             self._original_cursor = None
 
         # Don't suppress exceptions
         return False
 
     def __call__(self, func: Callable[..., Any]) -> Callable[..., Any]:
+        """Allow SqlTraceback to be used as a decorator."""
+
         @functools.wraps(func)
         def wrapper(*args: Any, **kwargs: Any) -> Any:
             with self:
