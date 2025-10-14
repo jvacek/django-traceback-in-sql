@@ -33,7 +33,7 @@ import contextlib
 import functools
 import traceback
 import types
-from collections.abc import Callable
+from collections.abc import Callable, Mapping, Sequence
 from typing import Any, Protocol
 
 from django.conf import settings
@@ -210,7 +210,7 @@ class StacktraceCursorWrapper(CursorWrapper):
         modified_sql = add_stacktrace_to_query(sql)
         return super().execute(modified_sql, params)
 
-    def executemany(self, sql: str, param_list: list[Any]) -> Any:
+    def executemany(self, sql: str, param_list: Sequence[Sequence[Any] | Mapping[str, Any] | None]) -> Any:
         modified_sql = add_stacktrace_to_query(sql)
         return super().executemany(modified_sql, param_list)
 
@@ -225,7 +225,7 @@ class StacktraceDebugCursorWrapper(CursorDebugWrapper):
         modified_sql = add_stacktrace_to_query(sql)
         return super().execute(modified_sql, params)
 
-    def executemany(self, sql: str, param_list: list[Any]) -> Any:
+    def executemany(self, sql: str, param_list: Sequence[Sequence[Any] | Mapping[str, Any] | None]) -> Any:
         modified_sql = add_stacktrace_to_query(sql)
         return super().executemany(modified_sql, param_list)
 
