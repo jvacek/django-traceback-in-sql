@@ -1,5 +1,13 @@
 # SQL Stacktrace Context Manager
 
+[![Test Suite](https://github.com/jvacek/django-traceback-in-sql/actions/workflows/test.yml/badge.svg)](https://github.com/jvacek/django-traceback-in-sql/actions/workflows/test.yml)
+[![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
+[![uv](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/uv/main/assets/badge/v0.json)](https://github.com/astral-sh/uv)
+
+[![image](https://img.shields.io/pypi/v/django-traceback-in-sql.svg)](https://pypi.python.org/pypi/django-traceback-in-sql)
+[![image](https://img.shields.io/pypi/l/django-traceback-in-sql.svg)](https://github.com/astral-sh/django-traceback-in-sql/blob/main/LICENSE)
+[![image](https://img.shields.io/pypi/pyversions/django-traceback-in-sql.svg)](https://pypi.python.org/pypi/django-traceback-in-sql)
+
 A utility for adding Python stacktraces to Django SQL queries as comments.
 
 This can help figuring out where are queries getting triggered from, for example for tracking down N+1 queries.
@@ -10,6 +18,7 @@ This can help figuring out where are queries getting triggered from, for example
 - **Multiple Interfaces**: Available as a function-based context manager, class-based context manager, or decorator
 - **Test Compatible**: Works seamlessly with Django's `assertNumQueries` and other test utilities
 - **Stacktrace Filtering**: Focuses on application code by filtering out framework/library frames
+- **More tests than code**: Tested on Python 3.9—3.13, Django 4.2 and 5.2, with SQLite, PostgreSQL, and MySQL as databases
 
 ## Usage
 
