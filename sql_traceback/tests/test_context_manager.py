@@ -160,7 +160,7 @@ class TestSettingsConfiguration(TestCase):
     def test_settings_defaults(self):
         """Test that defaults work when settings are missing."""
         # Test that the current settings match expected defaults
-        from sql_traceback.context_manager import (
+        from sql_traceback.config import (
             FILTER_SITEPACKAGES,
             MAX_STACK_FRAMES,
             TRACEBACK_ENABLED,
