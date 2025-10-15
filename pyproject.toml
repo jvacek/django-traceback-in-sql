@@ -86,6 +86,9 @@ ignore = [
   "COM812",
 ]
 
+[tool.ruff.lint.extend-per-file-ignores]
+"*test*.py" = ["S101"]
+
 [tool.uv.build-backend]
 module-name = "sql_traceback"
 module-root = ""
