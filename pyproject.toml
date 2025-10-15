@@ -45,6 +45,47 @@ DJANGO_SETTINGS_MODULE = "sql_traceback.tests.settings"
 [tool.ruff]
 line-length = 120
 
+[tool.ruff.lint]
+extend-select = [
+  "B",
+  "C4",
+  "UP",
+  "ASYNC1",  # flake8-async
+  "B",  # flake8-bugbear
+  "C4",  # flake8-comprehensions
+  "COM",
+  "D2",
+  "D4",  # flake8-docstrings
+  "E",
+  "F",  # pyflakes
+  "G",  # flake8-logging-format
+  "N",  # pep8-naming
+  "S101",
+  "SIM",  # flake8-simplify
+  "W",  # pycodestyle
+  "YTT",
+  "PGH",
+  "PYI",
+  "RSE",
+  # Not directly mapping to flake8 plugins
+  "RUF100",  # replacement for NQA
+  "A",  # replacement for VNE003
+  "C90",  # Replacement for complexity checks below
+  "RET",  # replacement for R
+  "T100",  # replacement for OTA004
+  "T201",  # replacement for OTA001
+  "TID251",  # replacement for OTA007, OTA008
+  "UP006",  # replacement for PEA
+  "UP007",  # replacement for UNT001
+]
+ignore = [
+  "D213",
+  "D211",
+  "D413",
+  "D203",
+  "COM812",
+]
+
 [tool.uv.build-backend]
 module-name = "sql_traceback"
 module-root = ""

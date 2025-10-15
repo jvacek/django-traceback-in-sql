@@ -43,7 +43,7 @@ if DB_ENGINE == "postgres":
             "PASSWORD": DB_PASSWORD or "testpass",
             "HOST": DB_HOST or "localhost",
             "PORT": DB_PORT or "5432",
-        }
+        },
     }
 elif DB_ENGINE == "mysql":
     DATABASES = {
@@ -63,14 +63,14 @@ elif DB_ENGINE == "mysql":
                 "CHARSET": "utf8mb4",
                 "COLLATION": "utf8mb4_unicode_ci",
             },
-        }
+        },
     }
 else:  # sqlite
     DATABASES = {
         "default": {
             "ENGINE": "django.db.backends.sqlite3",
             "NAME": DB_NAME or ":memory:",
-        }
+        },
     }
 
     # Add logging to help debug database connection issues
@@ -96,5 +96,5 @@ else:  # sqlite
 
     # Print database configuration for debugging
     if os.environ.get("DEBUG_DB"):
-        print(f"Database configuration: ENGINE={DB_ENGINE}, HOST={DB_HOST}, NAME={DB_NAME}")
-        print(f"Database config: {DATABASES}")
+        print(f"Database configuration: ENGINE={DB_ENGINE}, HOST={DB_HOST}, NAME={DB_NAME}")  # noqa: T201
+        print(f"Database config: {DATABASES}")  # noqa: T201

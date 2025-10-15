@@ -39,9 +39,8 @@ class TestContextManagerUsage(TestCase):
     def test_function_based_context_manager(self):
         """Test that the function-based context manager adds stacktraces to queries."""
         # First execute a query without the context manager
-        with self.assertNumQueries(1):
-            with connection.cursor() as cursor:
-                cursor.execute("SELECT 1")
+        with self.assertNumQueries(1), connection.cursor() as cursor:
+            cursor.execute("SELECT 1")
 
         # Verify the query doesn't have a stacktrace comment
         self.assertNotIn("STACKTRACE:", connection.queries[0]["sql"])
@@ -50,9 +49,8 @@ class TestContextManagerUsage(TestCase):
         connection.queries_log.clear()
 
         # Now execute a query with the context manager
-        with sql_traceback(), self.assertNumQueries(1):
-            with connection.cursor() as cursor:
-                cursor.execute("SELECT 1")
+        with sql_traceback(), self.assertNumQueries(1), connection.cursor() as cursor:
+            cursor.execute("SELECT 1")
 
         # Verify the query has a stacktrace comment
         self.assertIn("STACKTRACE:", connection.queries[0]["sql"])
@@ -65,9 +63,8 @@ class TestContextManagerUsage(TestCase):
         connection.queries_log.clear()
 
         # Execute a query with the class-based context manager
-        with SqlTraceback(), self.assertNumQueries(1):
-            with connection.cursor() as cursor:
-                cursor.execute("SELECT 1")
+        with SqlTraceback(), self.assertNumQueries(1), connection.cursor() as cursor:
+            cursor.execute("SELECT 1")
 
         # Verify the query has a stacktrace comment
         self.assertIn("STACKTRACE:", connection.queries[0]["sql"])
@@ -101,13 +98,12 @@ class TestContextManagerUsage(TestCase):
         connection.queries_log.clear()
 
         # Use with assertNumQueries
-        with self.assertNumQueries(2):
-            with sql_traceback():
-                # Execute two queries
-                with connection.cursor() as cursor:
-                    cursor.execute("SELECT 1")
-                with connection.cursor() as cursor:
-                    cursor.execute("SELECT 2")
+        with self.assertNumQueries(2), sql_traceback():
+            # Execute two queries
+            with connection.cursor() as cursor:
+                cursor.execute("SELECT 1")
+            with connection.cursor() as cursor:
+                cursor.execute("SELECT 2")
 
         # Verify both queries have stacktraces
         self.assertIn("STACKTRACE:", connection.queries[0]["sql"])
@@ -119,10 +115,8 @@ class TestContextManagerUsage(TestCase):
         connection.queries_log.clear()
 
         # Execute a query with nested context managers
-        with sql_traceback():
-            with sql_traceback():
-                with connection.cursor() as cursor:
-                    cursor.execute("SELECT 1")
+        with sql_traceback(), sql_traceback(), connection.cursor() as cursor:
+            cursor.execute("SELECT 1")
 
         # Check that only one stacktrace comment was added
         sql = connection.queries[0]["sql"]
@@ -147,15 +141,15 @@ class TestSettingsConfiguration(TestCase):
         """Test that Django settings are properly loaded."""
         mock_settings = MockSettings()
 
-        with patch("django.conf.settings", mock_settings):
-            # Patch the module-level variables directly since they're cached
-            with (
-                patch("sql_traceback.config.TRACEBACK_ENABLED", True),
-                patch("sql_traceback.config.MAX_STACK_FRAMES", 15),
-                patch("sql_traceback.config.FILTER_SITEPACKAGES", True),
-            ):
-                # Test enabled check
-                self.assertTrue(_is_stacktrace_enabled())
+        # Patch the module-level variables directly since they're cached
+        with (
+            patch("django.conf.settings", mock_settings),
+            patch("sql_traceback.config.TRACEBACK_ENABLED", True),
+            patch("sql_traceback.config.MAX_STACK_FRAMES", 15),
+            patch("sql_traceback.config.FILTER_SITEPACKAGES", True),
+        ):
+            # Test enabled check
+            self.assertTrue(_is_stacktrace_enabled())
 
     def test_settings_defaults(self):
         """Test that defaults work when settings are missing."""
@@ -178,9 +172,8 @@ class TestSettingsConfiguration(TestCase):
         connection.queries_log.clear()
 
         # Execute a query with the context manager, but with stacktraces disabled
-        with sql_traceback(), self.assertNumQueries(1):
-            with connection.cursor() as cursor:
-                cursor.execute("SELECT 1")
+        with sql_traceback(), self.assertNumQueries(1), connection.cursor() as cursor:
+            cursor.execute("SELECT 1")
 
         # Verify the query does not have a stacktrace comment
         self.assertNotIn("STACKTRACE:", connection.queries[0]["sql"])
@@ -215,9 +208,8 @@ class TestStacktraceFiltering(TestCase):
         connection.queries_log.clear()
 
         # Execute a query with the context manager
-        with sql_traceback(), self.assertNumQueries(1):
-            with connection.cursor() as cursor:
-                cursor.execute("SELECT 1")
+        with sql_traceback(), self.assertNumQueries(1), connection.cursor() as cursor:
+            cursor.execute("SELECT 1")
 
         # Verify the query has a stacktrace
         sql_with_stacktrace = connection.queries[0]["sql"]
