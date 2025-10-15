@@ -11,9 +11,15 @@
 
 Annotates the stacktrace into the SQL query as a comment at runtime. Helpful for tracking down where queries are ran from within code, for example for analysing query counts in unit tests when trying to prevent N+1s.
 
+## Compatibility
+
+- Python 3.9–3.13
+- Django 4.2, 5.2
+- SQLite, PostgreSQL, MySQL
+
 ## Quick Examples
 
-### Find N+1 queries in tests
+### Find N+1 queries in Django unit tests
 
 ```python
 from django.contrib.auth import get_user_model
@@ -40,6 +46,39 @@ E   /*
 E   STACKTRACE:
 E   # /path/to/tests/test_test_test.py:12 in test_something
 E   */
+```
+
+### In pytest-django tests
+
+The above equivalent would look like so
+
+```python
+import pytest
+from django.contrib.auth import get_user_model
+from sql_traceback import sql_traceback
+
+
+User = get_user_model()
+
+
+@pytest.mark.django_db
+def test_something(django_assert_num_queries):
+    with sql_traceback(), django_assert_num_queries(0):
+        _ = User.objects.count()
+```
+
+and when `pytest` is ran with the `-v` flag, you will see the following in the output
+
+```text
+E               Queries:
+E               ========
+E
+E               SELECT COUNT(*) AS `__count` FROM `auth_user`
+E               /*
+E               STACKTRACE:
+E               # /Users/jvacek/repositories/otainsight/usermanagement/.venv/bin/pytest:10 in <module>
+E               # /path/to/tests/tests/test_test_test.py:12 in test_something
+E               */
 ```
 
 ### As a context manager
@@ -69,24 +108,8 @@ Optional settings in your Django `settings.py`:
 ```python
 SQL_TRACEBACK_ENABLED = True                      # Enable/disable stacktracing (default: True)
 SQL_TRACEBACK_MAX_FRAMES = 15                     # Max number of stack frames (default: 15)
-SQL_TRACEBACK_FILTER_SITEPACKAGES = True          # Filter out third-party packages (default: True)
-SQL_TRACEBACK_FILTER_TESTING_FRAMEWORKS = True    # Filter out pytest/unittest frames (default: True)
-SQL_TRACEBACK_FILTER_STDLIB = True                # Filter out Python standard library frames (default: True)
+SQL_TRACEBACK_FILTER_SITEPACKAGES = True          # Filter out third-party packages (e.g., **django**, requests, pluggy, etc.) (default: True)
+SQL_TRACEBACK_FILTER_TESTING_FRAMEWORKS = True    # Filter out pytest/unittest frames (pytest + unittest) (default: True)
+SQL_TRACEBACK_FILTER_STDLIB = True                # Filter out Python standard library frames (e.g., threading, contextlib, etc.) (default: True)
 SQL_TRACEBACK_MIN_APP_FRAMES = 1                  # Minimum application frames required (default: 1)
 ```
-
-### Filtering Options
-
-The filtering options serve different purposes and can be used independently:
-
-- **`FILTER_SITEPACKAGES`**: Removes third-party library code (e.g., **django**, requests, pluggy, etc.)
-- **`FILTER_STDLIB`**: Removes Python built-in modules (e.g., threading, contextlib, etc.)
-- **`FILTER_TESTING_FRAMEWORKS`**: Removes test framework internals (pytest + unittest)
-
-The testing framework filter is useful because testing frameworks span both categories above, and you almost never want to see their internals when debugging SQL queries.
-
-## Compatibility
-
-- Python 3.9–3.13
-- Django 4.2, 5.2
-- SQLite, PostgreSQL, MySQL
