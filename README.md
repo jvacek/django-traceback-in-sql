@@ -9,31 +9,37 @@
 [![Supported Python Versions](https://img.shields.io/pypi/pyversions/django-traceback-in-sql.svg)](https://pypi.python.org/pypi/django-traceback-in-sql)
 [![Supported Django versions](https://img.shields.io/pypi/frameworkversions/django/django-traceback-in-sql)](https://pypi.python.org/pypi/django-traceback-in-sql)
 
+Annotates the stacktrace into the SQL query as a comment at runtime. Helpful for tracking down where queries are ran from within code, for example for analysing query counts in unit tests when trying to prevent N+1s.
+
 ## Quick Examples
 
 ### Find N+1 queries in tests
 
 ```python
+from django.contrib.auth import get_user_model
+from django.test import TestCase
 from sql_traceback import sql_traceback
 
-class MyTest(TestCase):
+
+User = get_user_model()
+
+
+class Test(TestCase):
     def test_something(self):
-        with sql_traceback(), self.assertNumQueries(1):
-            users = User.objects.all()
-            for user in users:
-                print(user.profile.name)
+        with sql_traceback(), self.assertNumQueries(0):
+            _ = User.objects.count()
 ```
 
 If the assert gets triggered, you will see something like the following output:
 
 ```text
-AssertionError: 2 != 1 : Unexpected queries detected:
-1. SELECT "app_profile"."id", "app_profile"."user_id", "app_profile"."name" FROM "app_profile" WHERE "app_profile"."user_id" = 1
-   /*
-    STACKTRACE:
-    # /path/to/my_project/views.py:42 in get_user
-    # /path/to/my_project/services.py:23 in fetch_data
-    */;
+E   AssertionError: 1 != 0 : 1 queries executed, 0 expected
+E   Captured queries were:
+E   1. SELECT COUNT(*) AS `__count` FROM `auth_user`
+E   /*
+E   STACKTRACE:
+E   # /path/to/tests/test_test_test.py:12 in test_something
+E   */
 ```
 
 ### As a context manager
