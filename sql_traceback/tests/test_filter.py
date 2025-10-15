@@ -73,6 +73,41 @@ class TestStacktraceFiltering(TestCase):
                 result = should_include_frame(frame)
                 self.assertEqual(result, expected, f"For '{filename}', expected {expected}, got {result}")
 
+    def test_pytest_executable_filtering(self):
+        """Test that pytest executable paths are filtered out while internals are also filtered."""
+        with patch("sql_traceback.filter.FILTER_TESTING_FRAMEWORKS", True):
+            # Mock traceback frame
+            def create_mock_frame(filename):
+                frame = Mock()
+                frame.filename = filename
+                frame.lineno = 42
+                frame.name = "test_function"
+                return frame
+
+            # Test cases for pytest executable paths (should be excluded)
+            pytest_executable_cases = [
+                ("/Users/user/.venv/bin/pytest", False),
+                ("/home/user/venv/bin/pytest", False),
+                ("/usr/local/bin/pytest", False),
+                ("/opt/conda/bin/pytest", False),
+                ("C:\\Users\\user\\venv\\Scripts\\pytest.exe", False),
+            ]
+
+            # Test cases for pytest internals (should be excluded)
+            pytest_internal_cases = [
+                ("/path/to/site-packages/_pytest/main.py", False),
+                ("/usr/lib/python3.9/site-packages/_pytest/runner.py", False),
+                ("/path/to/site-packages/pytest_django/plugin.py", False),
+                ("/usr/lib/python3.9/site-packages/pluggy/hooks.py", False),
+            ]
+
+            all_cases = pytest_executable_cases + pytest_internal_cases
+
+            for filename, expected in all_cases:
+                frame = create_mock_frame(filename)
+                result = should_include_frame(frame)
+                self.assertEqual(result, expected, f"For '{filename}', expected {expected}, got {result}")
+
     def test_disabled_site_packages_filtering(self):
         """Test behavior when site-packages filtering is disabled."""
         # Test with site-packages filtering disabled

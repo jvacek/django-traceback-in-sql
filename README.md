@@ -76,7 +76,6 @@ E
 E               SELECT COUNT(*) AS `__count` FROM `auth_user`
 E               /*
 E               STACKTRACE:
-E               # /Users/jvacek/repositories/otainsight/usermanagement/.venv/bin/pytest:10 in <module>
 E               # /path/to/tests/tests/test_test_test.py:12 in test_something
 E               */
 ```

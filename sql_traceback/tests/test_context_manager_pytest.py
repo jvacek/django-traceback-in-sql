@@ -1,9 +1,13 @@
 """Tests for the SQL stacktrace context manager using pytest-django."""
 
 import pytest
+from django.contrib.auth import get_user_model
 from django.db import connection
 
 from sql_traceback import SqlTraceback, sql_traceback
+
+
+User = get_user_model()
 
 
 @pytest.mark.django_db
@@ -12,6 +16,8 @@ class TestContextManagerWithPytestDjango:
 
     This test class demonstrates integration with pytest-django's django_assert_num_queries
     fixture and shows how stacktraces are added while maintaining query counting accuracy.
+    It also tests pytest executable filtering to ensure clean stacktraces without pytest
+    framework noise while preserving user test file information.
     """
 
     def test_single_query_with_stacktrace(self, django_assert_num_queries, settings):
@@ -28,6 +34,14 @@ class TestContextManagerWithPytestDjango:
         assert "STACKTRACE:" in connection.queries[0]["sql"]
         # Verify the stacktrace contains this test file
         assert "test_context_manager_pytest.py" in connection.queries[0]["sql"]
+
+        # Verify pytest executable filtering works
+        sql_with_stacktrace = connection.queries[0]["sql"]
+        assert "/bin/pytest" not in sql_with_stacktrace
+        assert "\\Scripts\\pytest.exe" not in sql_with_stacktrace
+        assert "_pytest/" not in sql_with_stacktrace
+        assert "pytest_django/" not in sql_with_stacktrace
+        assert "/pluggy/" not in sql_with_stacktrace
 
     def test_multiple_queries_with_stacktrace(self, django_assert_num_queries, settings):
         """Test that stacktraces are added to multiple queries with precise counting."""
@@ -187,3 +201,38 @@ class TestContextManagerWithPytestDjango:
         # Check that only one stacktrace comment was added
         sql = connection.queries[0]["sql"]
         assert sql.count("STACKTRACE:") == 1
+
+    def test_pytest_executable_filtering_with_user_model(self, django_assert_num_queries, settings):
+        """Test pytest executable filtering with User model queries."""
+        settings.DEBUG = True
+        connection.queries_log.clear()
+
+        # Execute the exact scenario from the reported issue
+        with sql_traceback(), django_assert_num_queries(1):
+            _ = User.objects.count()
+
+        # Verify stacktrace was added but pytest executable is filtered out
+        sql_with_stacktrace = connection.queries[0]["sql"]
+        assert "STACKTRACE:" in sql_with_stacktrace
+        assert "test_context_manager_pytest.py" in sql_with_stacktrace
+
+        # Verify pytest executable and internals are filtered out
+        assert "/bin/pytest" not in sql_with_stacktrace
+        assert "\\Scripts\\pytest.exe" not in sql_with_stacktrace
+        assert "_pytest/" not in sql_with_stacktrace
+        assert "pytest_django/" not in sql_with_stacktrace
+        assert "/pluggy/" not in sql_with_stacktrace
+
+    def test_pytest_filtering_can_be_disabled(self, django_assert_num_queries, settings):
+        """Test that pytest filtering can be disabled via settings."""
+        settings.DEBUG = True
+        settings.SQL_TRACEBACK_FILTER_TESTING_FRAMEWORKS = False
+        connection.queries_log.clear()
+
+        with sql_traceback(), django_assert_num_queries(1):
+            User.objects.count()
+
+        # Verify stacktrace was added and this test file is included
+        sql_with_stacktrace = connection.queries[0]["sql"]
+        assert "STACKTRACE:" in sql_with_stacktrace
+        assert "test_context_manager_pytest.py" in sql_with_stacktrace

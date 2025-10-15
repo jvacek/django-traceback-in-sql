@@ -83,9 +83,15 @@ def should_include_frame(frame: traceback.FrameSummary) -> bool:
         # Filter pytest internals (third-party)
         pytest_excludes = [
             "_pytest/",
-            "/pytest/",
             "pytest_django/",
             "/pluggy/",
+        ]
+
+        # Filter pytest executables - these are entry points, not useful for SQL debugging
+        pytest_executable_excludes = [
+            "/bin/pytest",
+            "/scripts/pytest.exe",  # Windows (lowercased for case-insensitive matching)
+            "\\scripts\\pytest.exe",  # Windows with backslashes (lowercased)
         ]
 
         # Filter unittest internals (stdlib)
@@ -98,7 +104,7 @@ def should_include_frame(frame: traceback.FrameSummary) -> bool:
         ]
 
         # Combine all testing framework excludes
-        testing_excludes = pytest_excludes + unittest_excludes
+        testing_excludes = pytest_excludes + pytest_executable_excludes + unittest_excludes
 
         # Don't filter out user test files - only internal framework files
         if any(exclude in filename_lower for exclude in testing_excludes):
