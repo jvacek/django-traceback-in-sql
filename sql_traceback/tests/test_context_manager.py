@@ -8,7 +8,7 @@ from django.db import connection
 from django.test import TestCase, override_settings
 
 from sql_traceback import SqlTraceback, sql_traceback
-from sql_traceback.context_manager import _is_stacktrace_enabled
+from sql_traceback.parser import _is_stacktrace_enabled
 from sql_traceback.filter import should_include_frame
 
 
@@ -171,7 +171,7 @@ class TestSettingsConfiguration(TestCase):
         self.assertEqual(MAX_STACK_FRAMES, 15)
         self.assertTrue(FILTER_SITEPACKAGES)
 
-    @mock.patch("sql_traceback.context_manager.TRACEBACK_ENABLED", False)
+    @mock.patch("sql_traceback.parser.TRACEBACK_ENABLED", False)
     def test_disabled_via_django_setting(self):
         """Test that the context manager respects the SQL_TRACEBACK_ENABLED Django setting."""
         # Clear the queries log
@@ -187,8 +187,8 @@ class TestSettingsConfiguration(TestCase):
 
     def test_completely_disabled_stacktrace(self):
         """Test behavior when stacktracing is completely disabled."""
-        with patch("sql_traceback.context_manager.TRACEBACK_ENABLED", False):
-            from sql_traceback.context_manager import add_stacktrace_to_query
+        with patch("sql_traceback.parser.TRACEBACK_ENABLED", False):
+            from sql_traceback.parser import add_stacktrace_to_query
 
             sql = "SELECT * FROM users"
             result = add_stacktrace_to_query(sql)
@@ -289,8 +289,8 @@ class TestCoreFunctionality(TestCase):
 
     def test_stacktrace_addition_function(self):
         """Test the main stacktrace addition function directly."""
-        with patch("sql_traceback.context_manager.TRACEBACK_ENABLED", True):
-            from sql_traceback.context_manager import add_stacktrace_to_query
+        with patch("sql_traceback.parser.TRACEBACK_ENABLED", True):
+            from sql_traceback.parser import add_stacktrace_to_query
 
             # Test with enabled stacktracing
             sql = "SELECT * FROM users"
