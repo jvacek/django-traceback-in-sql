@@ -8,6 +8,8 @@ from django.db import connection
 from django.test import TestCase, override_settings
 
 from sql_traceback import SqlTraceback, sql_traceback
+from sql_traceback.context_manager import _is_stacktrace_enabled
+from sql_traceback.filter import should_include_frame
 
 
 class MockSettings:
@@ -148,12 +150,10 @@ class TestSettingsConfiguration(TestCase):
         with patch("django.conf.settings", mock_settings):
             # Patch the module-level variables directly since they're cached
             with (
-                patch("sql_traceback.context_manager.TRACEBACK_ENABLED", True),
-                patch("sql_traceback.context_manager.MAX_STACK_FRAMES", 15),
-                patch("sql_traceback.context_manager.FILTER_SITEPACKAGES", True),
+                patch("sql_traceback.config.TRACEBACK_ENABLED", True),
+                patch("sql_traceback.config.MAX_STACK_FRAMES", 15),
+                patch("sql_traceback.config.FILTER_SITEPACKAGES", True),
             ):
-                from sql_traceback.context_manager import _is_stacktrace_enabled
-
                 # Test enabled check
                 self.assertTrue(_is_stacktrace_enabled())
 
@@ -233,9 +233,7 @@ class TestStacktraceFiltering(TestCase):
     def test_frame_filtering_logic(self):
         """Test the detailed frame filtering logic."""
         # Test with site-packages filtering enabled
-        with patch("sql_traceback.context_manager.FILTER_SITEPACKAGES", True):
-            from sql_traceback.context_manager import _should_include_frame
-
+        with patch("sql_traceback.filter.FILTER_SITEPACKAGES", True):
             # Mock traceback frame
             def create_mock_frame(filename):
                 frame = Mock()
@@ -261,15 +259,13 @@ class TestStacktraceFiltering(TestCase):
 
             for filename, expected in test_cases:
                 frame = create_mock_frame(filename)
-                result = _should_include_frame(frame)
+                result = should_include_frame(frame)
                 self.assertEqual(result, expected, f"For '{filename}', expected {expected}, got {result}")
 
     def test_disabled_site_packages_filtering(self):
         """Test behavior when site-packages filtering is disabled."""
         # Test with site-packages filtering disabled
-        with patch("sql_traceback.context_manager.FILTER_SITEPACKAGES", False):
-            from sql_traceback.context_manager import _should_include_frame
-
+        with patch("sql_traceback.filter.FILTER_SITEPACKAGES", False):
             # Mock frame from site-packages
             frame = Mock()
             frame.filename = "/path/to/site-packages/package/file.py"
@@ -277,7 +273,7 @@ class TestStacktraceFiltering(TestCase):
             frame.name = "test_function"
 
             # Should be included when filtering is disabled
-            result = _should_include_frame(frame)
+            result = should_include_frame(frame)
             self.assertTrue(result, "Site-packages should be included when filtering is disabled")
 
 

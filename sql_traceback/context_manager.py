@@ -40,13 +40,11 @@ from django.db import connection
 from django.db.backends.utils import CursorDebugWrapper, CursorWrapper
 
 from sql_traceback.config import (
-    FILTER_SITEPACKAGES,
-    FILTER_STDLIB,
-    FILTER_TESTING_FRAMEWORKS,
     MAX_STACK_FRAMES,
     MIN_APP_FRAMES,
     TRACEBACK_ENABLED,
 )
+from sql_traceback.filter import sanitize_filename, should_include_frame
 
 __all__ = ["sql_traceback", "SqlTraceback"]
 
@@ -64,85 +62,6 @@ class CursorProtocol(Protocol):
 def _is_stacktrace_enabled() -> bool:
     """Check if stacktrace is enabled via Django settings."""
     return bool(TRACEBACK_ENABLED)
-
-
-def _sanitize_filename(filename: str) -> str:
-    """Sanitize filename to prevent any potential SQL comment issues."""
-    return filename.replace("*/", "").replace("/*", "").replace("\n", "").replace("\r", "")
-
-
-def _should_include_frame(frame: traceback.FrameSummary) -> bool:
-    """Determine if a stack frame should be included in the traceback."""
-    filename_lower = frame.filename.lower()
-
-    # Skip site-packages if filtering is enabled
-    if FILTER_SITEPACKAGES and "site-packages/" in filename_lower:
-        return False
-
-    # Skip Django framework code if filtering is enabled
-    if FILTER_SITEPACKAGES:
-        django_patterns = [
-            "/django/",
-            "\\django\\",  # Windows path separator
-        ]
-        if any(pattern in filename_lower for pattern in django_patterns):
-            return False
-
-    # Skip Python standard library if filtering is enabled
-    if FILTER_STDLIB:
-        # Filter Python standard library modules
-        stdlib_patterns = [
-            "/lib/python3.",
-            "/lib64/python3.",
-            "<frozen ",
-            "/runpy.py",
-            "/threading.py",
-            "/queue.py",
-            "/contextlib.py",
-            "/functools.py",
-            "/traceback.py",
-            "/inspect.py",
-            "/importlib/",
-            "/collections/",
-            "/weakref.py",
-            "/copy.py",
-            "/logging/",
-        ]
-
-        # Check if it's a stdlib module (not in site-packages)
-        if "site-packages/" not in filename_lower and any(pattern in filename_lower for pattern in stdlib_patterns):
-            return False
-
-    # Skip testing framework internals if filtering is enabled
-    # This is useful because testing frameworks span both third-party (pytest) and stdlib (unittest)
-    # and you almost never want to see their internals when debugging SQL queries
-    if FILTER_TESTING_FRAMEWORKS:
-        # Filter pytest internals (third-party)
-        pytest_excludes = [
-            "_pytest/",
-            "/pytest/",
-            "pytest_django/",
-            "/pluggy/",
-        ]
-
-        # Filter unittest internals (stdlib)
-        unittest_excludes = [
-            "unittest/case.py",
-            "unittest/loader.py",
-            "unittest/runner.py",
-            "unittest/suite.py",
-            "unittest/main.py",
-        ]
-
-        # Combine all testing framework excludes
-        testing_excludes = pytest_excludes + unittest_excludes
-
-        # Don't filter out user test files - only internal framework files
-        if any(exclude in filename_lower for exclude in testing_excludes):
-            return False
-
-    # Include everything else (application code including user test files)
-    return True
 
 
 def add_stacktrace_to_query(sql: str) -> str:
@@ -164,7 +83,7 @@ def add_stacktrace_to_query(sql: str) -> str:
         stack = traceback.extract_stack()
 
         # Filter out framework and library calls to focus on application code
-        filtered_stack = [frame for frame in stack if _should_include_frame(frame)]
+        filtered_stack = [frame for frame in stack if should_include_frame(frame)]
 
         # Format the stacktrace into a SQL comment
         stacktrace_lines = []
@@ -172,7 +91,7 @@ def add_stacktrace_to_query(sql: str) -> str:
         # Use configurable number of most recent frames for better context
         if filtered_stack and len(filtered_stack) >= MIN_APP_FRAMES:
             for frame in filtered_stack[-MAX_STACK_FRAMES:]:
-                safe_filename = _sanitize_filename(frame.filename)
+                safe_filename = sanitize_filename(frame.filename)
                 stacktrace_lines.append(f"# {safe_filename}:{frame.lineno} in {frame.name}")
         else:
             # If insufficient application frames found, include a minimal note
@@ -180,7 +99,7 @@ def add_stacktrace_to_query(sql: str) -> str:
             stacktrace_lines.append("# [Application frames filtered - showing remaining frames]")
             # Include any remaining frames that weren't filtered
             for frame in stack[-min(3, len(stack)) :]:
-                safe_filename = _sanitize_filename(frame.filename)
+                safe_filename = sanitize_filename(frame.filename)
                 stacktrace_lines.append(f"# {safe_filename}:{frame.lineno} in {frame.name}")
 
         stacktrace_comment = "\n".join(stacktrace_lines)
