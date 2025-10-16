@@ -26,6 +26,7 @@ Repository = "https://github.com/jvacek/django-traceback-in-sql"
 [dependency-groups]
 dev = [
   "basedpyright>=1.31.7",
+  "ipython>=8.37.0",
   "pytest>=8.3.5",
   "pytest-django>=4.11.1",
   "ruff==0.13.3",
