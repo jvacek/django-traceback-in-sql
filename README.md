@@ -83,11 +83,24 @@ E               */
 ### As a context manager
 
 ```python
+from django.db import connection
 from sql_traceback import sql_traceback
+from services import get_user_count
 
 with sql_traceback():
-    user = User.objects.select_related('profile').get(id=1)
-    user.profile.do_something()
+    get_user_count()
+
+print(connection.queries[-1]['sql'])
+```
+
+Should print output
+
+```text
+SELECT COUNT(*) AS "__count" FROM "auth_user"
+/*
+STACKTRACE:
+# /path/to/project/services.py:5 in get_user_count
+*/
 ```
 
 ### As a decorator
