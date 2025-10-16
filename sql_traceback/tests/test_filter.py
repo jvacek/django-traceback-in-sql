@@ -108,6 +108,89 @@ class TestStacktraceFiltering(TestCase):
                 result = should_include_frame(frame)
                 self.assertEqual(result, expected, f"For '{filename}', expected {expected}, got {result}")
 
+    def test_django_management_filtering(self):
+        """Test that Django management commands are filtered out."""
+        with patch("sql_traceback.filter.FILTER_SITEPACKAGES", True):
+            # Mock traceback frame
+            def create_mock_frame(filename):
+                frame = Mock()
+                frame.filename = filename
+                frame.lineno = 42
+                frame.name = "test_function"
+                return frame
+
+            # Test cases for Django management commands (should be excluded)
+            management_cases = [
+                ("/path/to/project/manage.py", False),
+                ("/Users/user/project/manage.py", False),
+                ("C:\\Users\\user\\project\\manage.py", False),
+                ("/usr/lib/python3.9/django/core/management/base.py", False),
+                ("/path/to/site-packages/django/core/management/commands/shell.py", False),
+            ]
+
+            for filename, expected in management_cases:
+                frame = create_mock_frame(filename)
+                result = should_include_frame(frame)
+                self.assertEqual(result, expected, f"For '{filename}', expected {expected}, got {result}")
+
+    def test_package_internal_filtering(self):
+        """Test that the package's own internal files are filtered out."""
+        with patch("sql_traceback.filter.FILTER_SITEPACKAGES", True):
+            # Mock traceback frame
+            def create_mock_frame(filename):
+                frame = Mock()
+                frame.filename = filename
+                frame.lineno = 42
+                frame.name = "test_function"
+                return frame
+
+            # Test cases for package internal files (should be excluded)
+            internal_cases = [
+                ("/path/to/sql_traceback/cursors.py", False),
+                ("/Users/user/project/sql_traceback/cursors.py", False),
+                ("C:\\Users\\user\\project\\sql_traceback\\cursors.py", False),
+                ("/path/to/sql_traceback/parser.py", False),
+                ("/Users/user/project/sql_traceback/parser.py", False),
+                ("C:\\Users\\user\\project\\sql_traceback\\parser.py", False),
+                # Should include user files with similar names
+                ("/path/to/my_cursors.py", True),
+                ("/path/to/my_parser.py", True),
+                ("/path/to/other_package/cursors.py", True),
+            ]
+
+            for filename, expected in internal_cases:
+                frame = create_mock_frame(filename)
+                result = should_include_frame(frame)
+                self.assertEqual(result, expected, f"For '{filename}', expected {expected}, got {result}")
+
+    def test_shell_execution_filtering(self):
+        """Test that shell execution frames are filtered out."""
+
+        # Mock traceback frame
+        def create_mock_frame(filename):
+            frame = Mock()
+            frame.filename = filename
+            frame.lineno = 42
+            frame.name = "test_function"
+            return frame
+
+        # Test cases for shell execution frames (should be excluded)
+        shell_cases = [
+            ("<string>", False),
+            ("<stdin>", False),
+            ("<console>", False),
+            ("<frozen importlib._bootstrap>", False),
+            # Should include normal files
+            ("string.py", True),
+            ("/path/to/stdin.py", True),
+            ("console.py", True),
+        ]
+
+        for filename, expected in shell_cases:
+            frame = create_mock_frame(filename)
+            result = should_include_frame(frame)
+            self.assertEqual(result, expected, f"For '{filename}', expected {expected}, got {result}")
+
     def test_disabled_site_packages_filtering(self):
         """Test behavior when site-packages filtering is disabled."""
         # Test with site-packages filtering disabled

@@ -38,17 +38,35 @@ def should_include_frame(frame: traceback.FrameSummary) -> bool:
     """
     filename_lower = frame.filename.lower()
 
-    # Skip site-packages if filtering is enabled
-    if FILTER_SITEPACKAGES and "site-packages/" in filename_lower:
+    # Skip shell execution frames (like from Django shell commands)
+    if frame.filename.startswith("<") and frame.filename.endswith(">"):
         return False
 
-    # Skip Django framework code if filtering is enabled
     if FILTER_SITEPACKAGES:
+        if "site-packages/" in filename_lower:
+            return False
+        # Skip Django management commands (manage.py and related)
+        management_patterns = [
+            "/manage.py",
+            "\\manage.py",  # Windows path separator
+            "/django/core/management/",
+            "\\django\\core\\management\\",  # Windows path separator
+        ]
+
+        # Skip this package's own internal files
+        package_internals = [
+            "/sql_traceback/cursors.py",
+            "\\sql_traceback\\cursors.py",  # Windows path separator
+            "/sql_traceback/parser.py",
+            "\\sql_traceback\\parser.py",  # Windows path separator
+        ]
+
+        # Skip Django framework code if filtering is enabled
         django_patterns = [
             "/django/",
             "\\django\\",  # Windows path separator
         ]
-        if any(pattern in filename_lower for pattern in django_patterns):
+        if any(pattern in filename_lower for pattern in django_patterns + package_internals + management_patterns):
             return False
 
     # Skip Python standard library if filtering is enabled
