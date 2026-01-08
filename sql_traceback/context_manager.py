@@ -36,9 +36,9 @@ from collections.abc import Callable
 from typing import Any, Protocol
 
 from django.db import connection
-from django.db.backends.utils import CursorDebugWrapper
 
-from sql_traceback.cursors import StacktraceCursorWrapper, StacktraceDebugCursorWrapper
+from sql_traceback.collector_registry import pop_collector, push_collector
+from sql_traceback.traceback_info import TracebackCollector
 
 __all__ = ["sql_traceback", "SqlTraceback"]
 
@@ -53,12 +53,38 @@ class CursorProtocol(Protocol):
     def fetchall(self) -> list[Any]: ...
 
 
+def _execute_wrapper(execute, sql, params, many, context):
+    """Wrap SQL execution to add stacktraces and collect queries.
+
+    This is called by Django's execute_wrapper context manager for every SQL query.
+    """
+    from sql_traceback.collector_registry import get_active_collector
+    from sql_traceback.parser import add_stacktrace_to_query
+
+    # Add stacktrace to query
+    modified_sql, frames = add_stacktrace_to_query(sql)
+
+    # Register query with collector if one is active for this thread
+    collector = get_active_collector()
+    if collector and frames:
+        collector.add_query(modified_sql, frames)
+
+    # Execute with modified SQL
+    return execute(modified_sql, params, many, context)
+
+
 @contextlib.contextmanager
 def sql_traceback():
     """Context manager that adds Python stacktraces to SQL queries.
 
     This helps with debugging by making it easier to trace where SQL queries originate from
     in the application code. Works with both direct SQL execution and ORM queries.
+
+    When used as a context manager (with the 'as' clause), returns a TracebackCollector that
+    provides programmatic access to the executed queries and their stack frames.
+
+    Note: When used as a decorator (via SqlTraceback), the collector is not accessible.
+          Use the context manager form with 'as' to access query information.
 
     Django Settings:
         SQL_TRACEBACK_ENABLED: Enable/disable stacktracing (default: True)
@@ -75,6 +101,14 @@ def sql_traceback():
         >>> with sql_traceback():
         >>>     users = User.objects.filter(is_active=True)
         >>>
+        >>> # Access programmatic traceback information
+        >>> with sql_traceback() as collector:
+        >>>     User.objects.count()
+        >>>     for query in collector.queries:
+        >>>         print(f"SQL: {query.sql}")
+        >>>         for frame in query.frames:
+        >>>             print(f"  {frame.path}:{frame.line} in {frame.name}")
+        >>>
         >>> # Use with tests and assertNumQueries
         >>> from django.test import TestCase
         >>>
@@ -83,26 +117,19 @@ def sql_traceback():
         >>>         with sql_traceback(), self.assertNumQueries(1):
         >>>             User.objects.first()
     """
-    # Save original cursor method
-    original_cursor = connection.cursor
-
-    # Define patched cursor method
-    @functools.wraps(original_cursor)
-    def cursor_with_stacktrace(*args: Any, **kwargs: Any) -> Any:
-        cursor = original_cursor(*args, **kwargs)
-
-        # If Django is in debug mode, it will use CursorDebugWrapper
-        if isinstance(cursor, CursorDebugWrapper):
-            return StacktraceDebugCursorWrapper(cursor.cursor, cursor.db)
-        return StacktraceCursorWrapper(cursor, connection)
+    # Create a collector for this context
+    collector = TracebackCollector()
 
     try:
-        # Apply cursor patch
-        connection.cursor = cursor_with_stacktrace  # pyright: ignore[reportGeneralTypeIssues]
-        yield
+        # Register collector as active for this thread (push onto stack)
+        push_collector(collector)
+
+        # Use Django's execute_wrapper for thread-safe SQL wrapping
+        with connection.execute_wrapper(_execute_wrapper):
+            yield collector
     finally:
-        # Restore original cursor method
-        connection.cursor = original_cursor  # pyright: ignore[reportGeneralTypeIssues]
+        # Unregister collector (pop from stack)
+        pop_collector()
 
 
 class SqlTraceback:
@@ -110,6 +137,9 @@ class SqlTraceback:
 
     Can be used as a context manager or decorator. Provides the same functionality
     as the sql_traceback function but with a class-based interface.
+
+    When used as a context manager, returns a TracebackCollector for programmatic access.
+    When used as a decorator, the collector is not accessible to the decorated function.
 
     Django Settings:
         SQL_TRACEBACK_ENABLED: Enable/disable stacktracing (default: True)
@@ -122,38 +152,32 @@ class SqlTraceback:
     Examples:
         >>> from sql_traceback import SqlTraceback
         >>>
-        >>> # As context manager
-        >>> with SqlTraceback():
+        >>> # As context manager with programmatic access
+        >>> with SqlTraceback() as collector:
         >>>     User.objects.all()
+        >>>     print(collector.queries)
         >>>
-        >>> # As decorator
+        >>> # As decorator (no programmatic access)
         >>> @SqlTraceback()
         >>> def my_function():
         >>>     return User.objects.all()
     """
 
     def __init__(self):
-        self._original_cursor: Callable[..., Any] | None = None
+        self._collector: TracebackCollector | None = None
 
     def __enter__(self):
-        # Save original cursor method
-        self._original_cursor = connection.cursor
+        # Create a collector for this context
+        self._collector = TracebackCollector()
 
-        # Define patched cursor method
-        def cursor_with_stacktrace(*args: Any, **kwargs: Any) -> Any:
-            if self._original_cursor is None:
-                return connection.cursor(*args, **kwargs)
+        # Register collector as active for this thread (push onto stack)
+        push_collector(self._collector)
 
-            cursor = self._original_cursor(*args, **kwargs)
+        # Enter Django's execute_wrapper context
+        self._execute_wrapper_context = connection.execute_wrapper(_execute_wrapper)
+        self._execute_wrapper_context.__enter__()
 
-            # If Django is in debug mode, it will use CursorDebugWrapper
-            if isinstance(cursor, CursorDebugWrapper):
-                return StacktraceDebugCursorWrapper(cursor.cursor, cursor.db)
-            return StacktraceCursorWrapper(cursor, connection)
-
-        # Apply cursor patch
-        connection.cursor = cursor_with_stacktrace  # pyright: ignore[reportGeneralTypeIssues]
-        return self
+        return self._collector
 
     def __exit__(
         self,
@@ -161,19 +185,29 @@ class SqlTraceback:
         exc_val: BaseException | None,
         exc_tb: types.TracebackType | None,
     ) -> bool:
-        # Restore original cursor method even if an exception occurred
         try:
-            if hasattr(self, "_original_cursor") and self._original_cursor is not None:
-                connection.cursor = self._original_cursor  # pyright: ignore[reportGeneralTypeIssues]
+            # Exit Django's execute_wrapper context
+            if hasattr(self, "_execute_wrapper_context"):
+                self._execute_wrapper_context.__exit__(exc_type, exc_val, exc_tb)
+
+            # Unregister collector (pop from stack)
+            pop_collector()
         finally:
-            # Always reset the stored reference
-            self._original_cursor = None
+            # Always reset the stored references
+            self._collector = None
+            if hasattr(self, "_execute_wrapper_context"):
+                del self._execute_wrapper_context
 
         # Don't suppress exceptions
         return False
 
     def __call__(self, func: Callable[..., Any]) -> Callable[..., Any]:
-        """Allow SqlTraceback to be used as a decorator."""
+        """Allow SqlTraceback to be used as a decorator.
+
+        Note: When used as a decorator, the TracebackCollector is not accessible
+        to the decorated function. Use the context manager form if you need
+        programmatic access to query information.
+        """
 
         @functools.wraps(func)
         def wrapper(*args: Any, **kwargs: Any) -> Any:
