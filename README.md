@@ -113,6 +113,49 @@ def get_users():
     return User.objects.filter(is_active=True)
 ```
 
+### Programmatic Access to Traceback Information
+
+When used as a context manager with the `as` clause, `sql_traceback()` returns a collector that provides programmatic access to executed queries and their stack frames:
+
+```python
+from sql_traceback import sql_traceback
+from django.contrib.auth import get_user_model
+
+User = get_user_model()
+
+with sql_traceback() as collector:
+    User.objects.count()
+    User.objects.filter(username="admin").exists()
+
+# Access all queries and their stack frames
+for query in collector.queries:
+    print(f"SQL: {query.sql}")
+    for frame in query.frames:
+        print(f"  {frame.path}:{frame.line} in {frame.name}")
+
+# Convenience property: access frames from the last query only
+for frame in collector.frames:
+    print(f"{frame.path}:{frame.line} in {frame.name}")
+```
+
+The collector provides:
+
+- `collector.queries` - List of `QueryInfo` objects, one per executed query
+- `collector.frames` - Convenience property returning frames from the last query
+
+Each `QueryInfo` object has:
+
+- `sql` - The SQL query string (with traceback comment)
+- `frames` - List of `StackFrame` objects
+
+Each `StackFrame` object has:
+
+- `path` - File path where the frame is located
+- `line` - Line number in the file
+- `name` - Function or method name
+
+Note: Programmatic access is only available when using the context manager form with `as`. The decorator form (`@SqlTraceback()`) does not provide access to the collector.
+
 ## Configuration
 
 Optional settings in your Django `settings.py`:
