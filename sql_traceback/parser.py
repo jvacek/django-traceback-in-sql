@@ -50,6 +50,23 @@ def extract_stack_frames() -> list[StackFrame]:
         return []
 
 
+def format_stacktrace_comment(frames: list[StackFrame]) -> str:
+    """Format stack frames into a SQL comment string.
+
+    Args:
+        frames: List of stack frames to format
+
+    Returns:
+        Formatted SQL comment with stacktrace, or empty string if no frames
+    """
+    if not frames:
+        return ""
+
+    stacktrace_lines = [f"# {frame.path}:{frame.line} in {frame.name}" for frame in frames]
+    stacktrace_comment = "\n".join(stacktrace_lines)
+    return f"\n/*\nSTACKTRACE:\n{stacktrace_comment}\n*/"
+
+
 def add_stacktrace_to_query(sql: str) -> tuple[str, list[StackFrame]]:
     """Add the current Python stacktrace to a SQL query as a comment.
 
@@ -74,14 +91,8 @@ def add_stacktrace_to_query(sql: str) -> tuple[str, list[StackFrame]]:
     if not frames:
         return sql, []
 
-    # Format the stacktrace into a SQL comment
-    stacktrace_lines = []
-    for frame in frames:
-        stacktrace_lines.append(f"# {frame.path}:{frame.line} in {frame.name}")
-
-    stacktrace_comment = "\n".join(stacktrace_lines)
-
-    # Append the stacktrace comment to the SQL query
-    modified_sql = f"{sql}\n/*\nSTACKTRACE:\n{stacktrace_comment}\n*/"
+    # Format and append the stacktrace comment
+    comment = format_stacktrace_comment(frames)
+    modified_sql = f"{sql}{comment}"
 
     return modified_sql, frames

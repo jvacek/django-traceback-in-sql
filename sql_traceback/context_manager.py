@@ -31,7 +31,6 @@ Configuration in settings.py:
 
 import contextlib
 import functools
-import threading
 import types
 from collections.abc import Callable
 from typing import Any, Protocol
@@ -39,41 +38,33 @@ from typing import Any, Protocol
 from django.db import connection
 from django.db.backends.utils import CursorDebugWrapper
 
+from sql_traceback.collector_registry import pop_collector, push_collector
 from sql_traceback.cursors import StacktraceCursorWrapper, StacktraceDebugCursorWrapper
 from sql_traceback.traceback_info import TracebackCollector
 
 __all__ = ["sql_traceback", "SqlTraceback"]
 
 
-# Thread-local storage for active collector stack
-_thread_local = threading.local()
-
-
-def _get_active_collector() -> TracebackCollector | None:
-    """Get the currently active TracebackCollector for this thread.
-
-    Returns:
-        The active TracebackCollector, or None if no context is active.
-    """
-    stack = getattr(_thread_local, "collector_stack", [])
-    return stack[-1] if stack else None
-
-
-def _push_collector(collector: TracebackCollector) -> None:
-    """Push a new collector onto the stack for this thread.
+def _create_cursor_wrapper(original_cursor: Callable[..., Any]) -> Callable[..., Any]:
+    """Create a cursor wrapper that adds stacktraces.
 
     Args:
-        collector: The TracebackCollector to push onto the stack.
+        original_cursor: The original cursor creation function
+
+    Returns:
+        A wrapped cursor function that adds stacktrace functionality
     """
-    if not hasattr(_thread_local, "collector_stack"):
-        _thread_local.collector_stack = []
-    _thread_local.collector_stack.append(collector)
 
+    @functools.wraps(original_cursor)
+    def cursor_with_stacktrace(*args: Any, **kwargs: Any) -> Any:
+        cursor = original_cursor(*args, **kwargs)
 
-def _pop_collector() -> None:
-    """Pop the current collector from the stack for this thread."""
-    if hasattr(_thread_local, "collector_stack") and _thread_local.collector_stack:
-        _thread_local.collector_stack.pop()
+        # If Django is in debug mode, it will use CursorDebugWrapper
+        if isinstance(cursor, CursorDebugWrapper):
+            return StacktraceDebugCursorWrapper(cursor.cursor, cursor.db)
+        return StacktraceCursorWrapper(cursor, connection)
+
+    return cursor_with_stacktrace
 
 
 class CursorProtocol(Protocol):
@@ -132,33 +123,21 @@ def sql_traceback():
     """
     # Create a collector for this context
     collector = TracebackCollector()
-
-    # Save original cursor method
     original_cursor = connection.cursor
-
-    # Define patched cursor method
-    @functools.wraps(original_cursor)
-    def cursor_with_stacktrace(*args: Any, **kwargs: Any) -> Any:
-        cursor = original_cursor(*args, **kwargs)
-
-        # If Django is in debug mode, it will use CursorDebugWrapper
-        if isinstance(cursor, CursorDebugWrapper):
-            return StacktraceDebugCursorWrapper(cursor.cursor, cursor.db)
-        return StacktraceCursorWrapper(cursor, connection)
 
     try:
         # Register collector as active for this thread (push onto stack)
-        _push_collector(collector)
+        push_collector(collector)
 
         # Apply cursor patch
-        connection.cursor = cursor_with_stacktrace  # pyright: ignore[reportGeneralTypeIssues]
+        connection.cursor = _create_cursor_wrapper(original_cursor)  # type: ignore[method-assign]
         yield collector
     finally:
         # Unregister collector (pop from stack)
-        _pop_collector()
+        pop_collector()
 
         # Restore original cursor method
-        connection.cursor = original_cursor  # pyright: ignore[reportGeneralTypeIssues]
+        connection.cursor = original_cursor  # type: ignore[method-assign]
 
 
 class SqlTraceback:
@@ -199,27 +178,13 @@ class SqlTraceback:
     def __enter__(self):
         # Create a collector for this context
         self._collector = TracebackCollector()
-
-        # Save original cursor method
         self._original_cursor = connection.cursor
 
-        # Define patched cursor method
-        def cursor_with_stacktrace(*args: Any, **kwargs: Any) -> Any:
-            if self._original_cursor is None:
-                return connection.cursor(*args, **kwargs)
-
-            cursor = self._original_cursor(*args, **kwargs)
-
-            # If Django is in debug mode, it will use CursorDebugWrapper
-            if isinstance(cursor, CursorDebugWrapper):
-                return StacktraceDebugCursorWrapper(cursor.cursor, cursor.db)
-            return StacktraceCursorWrapper(cursor, connection)
-
         # Register collector as active for this thread (push onto stack)
-        _push_collector(self._collector)
+        push_collector(self._collector)
 
         # Apply cursor patch
-        connection.cursor = cursor_with_stacktrace  # pyright: ignore[reportGeneralTypeIssues]
+        connection.cursor = _create_cursor_wrapper(self._original_cursor)  # type: ignore[method-assign]
         return self._collector
 
     def __exit__(
@@ -231,10 +196,10 @@ class SqlTraceback:
         # Restore original cursor method even if an exception occurred
         try:
             # Unregister collector (pop from stack)
-            _pop_collector()
+            pop_collector()
 
             if hasattr(self, "_original_cursor") and self._original_cursor is not None:
-                connection.cursor = self._original_cursor  # pyright: ignore[reportGeneralTypeIssues]
+                connection.cursor = self._original_cursor  # type: ignore[method-assign]
         finally:
             # Always reset the stored reference
             self._original_cursor = None

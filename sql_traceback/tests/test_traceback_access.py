@@ -246,22 +246,22 @@ def test_decorator_mode_no_collector():
 
 def test_exception_handling_in_context():
     """Test that collector is properly cleaned up even when exceptions occur."""
-    from sql_traceback.context_manager import _get_active_collector
+    from sql_traceback.collector_registry import get_active_collector
 
     # Before context
-    assert _get_active_collector() is None
+    assert get_active_collector() is None
 
     try:
         with sql_traceback():
             User.objects.count()
             # Collector should be active
-            assert _get_active_collector() is not None
+            assert get_active_collector() is not None
             raise ValueError("Test exception")
     except ValueError:
         pass
 
     # After context (even with exception), collector should be cleared
-    assert _get_active_collector() is None
+    assert get_active_collector() is None
 
 
 def test_filter_behavior_preserved():
