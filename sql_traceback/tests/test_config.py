@@ -77,5 +77,6 @@ class TestSettingsConfiguration(TestCase):
             from sql_traceback.parser import add_stacktrace_to_query
 
             sql = "SELECT * FROM users"
-            result = add_stacktrace_to_query(sql)
-            self.assertEqual(result, sql, "Should return original SQL when disabled")
+            result_sql, result_frames = add_stacktrace_to_query(sql)
+            self.assertEqual(result_sql, sql, "Should return original SQL when disabled")
+            self.assertEqual(result_frames, [], "Should return empty frames list when disabled")

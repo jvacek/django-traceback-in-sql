@@ -34,14 +34,16 @@ class TestCoreFunctionality(TestCase):
 
             # Test with enabled stacktracing
             sql = "SELECT * FROM users"
-            result = add_stacktrace_to_query(sql)
-            self.assertIn("/*\nSTACKTRACE:", result, "Should add stacktrace when enabled")
-            self.assertIn(sql, result, "Should contain original SQL")
+            result_sql, result_frames = add_stacktrace_to_query(sql)
+            self.assertIn("/*\nSTACKTRACE:", result_sql, "Should add stacktrace when enabled")
+            self.assertIn(sql, result_sql, "Should contain original SQL")
+            self.assertGreater(len(result_frames), 0, "Should return frames when enabled")
 
             # Test with already existing stacktrace
             sql_with_stacktrace = "SELECT * FROM users\n/*\nSTACKTRACE:\n# existing\n*/"
-            result = add_stacktrace_to_query(sql_with_stacktrace)
-            self.assertEqual(result, sql_with_stacktrace, "Should not add stacktrace twice")
+            result_sql, result_frames = add_stacktrace_to_query(sql_with_stacktrace)
+            self.assertEqual(result_sql, sql_with_stacktrace, "Should not add stacktrace twice")
+            self.assertEqual(result_frames, [], "Should return empty frames when already present")
 
     def test_stacktrace_disabled(self):
         """Test that stacktraces are not added when disabled."""
@@ -49,8 +51,9 @@ class TestCoreFunctionality(TestCase):
             from sql_traceback.parser import add_stacktrace_to_query
 
             sql = "SELECT * FROM users"
-            result = add_stacktrace_to_query(sql)
-            self.assertEqual(result, sql, "Should not modify SQL when disabled")
+            result_sql, result_frames = add_stacktrace_to_query(sql)
+            self.assertEqual(result_sql, sql, "Should not modify SQL when disabled")
+            self.assertEqual(result_frames, [], "Should return empty frames when disabled")
 
     def test_empty_sql_handling(self):
         """Test handling of empty or whitespace-only SQL."""
@@ -58,12 +61,12 @@ class TestCoreFunctionality(TestCase):
             from sql_traceback.parser import add_stacktrace_to_query
 
             # Test empty string - the current implementation adds stacktrace even to empty strings
-            result = add_stacktrace_to_query("")
-            self.assertIn("STACKTRACE:", result, "Should add stacktrace even to empty string")
+            result_sql, result_frames = add_stacktrace_to_query("")
+            self.assertIn("STACKTRACE:", result_sql, "Should add stacktrace even to empty string")
 
             # Test whitespace-only string - also gets stacktrace added
-            result = add_stacktrace_to_query("   \n\t  ")
-            self.assertIn("STACKTRACE:", result, "Should add stacktrace to whitespace-only string")
+            result_sql, result_frames = add_stacktrace_to_query("   \n\t  ")
+            self.assertIn("STACKTRACE:", result_sql, "Should add stacktrace to whitespace-only string")
 
     def test_multiline_sql_handling(self):
         """Test handling of multiline SQL queries."""
@@ -77,9 +80,9 @@ class TestCoreFunctionality(TestCase):
             WHERE u.active = 1
             ORDER BY u.name
             """
-            result = add_stacktrace_to_query(multiline_sql)
-            self.assertIn("STACKTRACE:", result)
-            self.assertIn("SELECT u.id, u.name, p.title", result)
+            result_sql, result_frames = add_stacktrace_to_query(multiline_sql)
+            self.assertIn("STACKTRACE:", result_sql)
+            self.assertIn("SELECT u.id, u.name, p.title", result_sql)
 
     def test_sql_with_comments_handling(self):
         """Test handling of SQL that already contains comments."""
@@ -92,10 +95,10 @@ class TestCoreFunctionality(TestCase):
             -- This is a line comment
             WHERE active = 1
             """
-            result = add_stacktrace_to_query(sql_with_comments)
-            self.assertIn("STACKTRACE:", result)
-            self.assertIn("This is an existing comment", result)
-            self.assertIn("This is a line comment", result)
+            result_sql, result_frames = add_stacktrace_to_query(sql_with_comments)
+            self.assertIn("STACKTRACE:", result_sql)
+            self.assertIn("This is an existing comment", result_sql)
+            self.assertIn("This is a line comment", result_sql)
 
     def test_context_manager_initialization(self):
         """Test that context managers initialize correctly."""
