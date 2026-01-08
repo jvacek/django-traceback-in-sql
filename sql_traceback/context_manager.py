@@ -36,35 +36,11 @@ from collections.abc import Callable
 from typing import Any, Protocol
 
 from django.db import connection
-from django.db.backends.utils import CursorDebugWrapper
 
 from sql_traceback.collector_registry import pop_collector, push_collector
-from sql_traceback.cursors import StacktraceCursorWrapper, StacktraceDebugCursorWrapper
 from sql_traceback.traceback_info import TracebackCollector
 
 __all__ = ["sql_traceback", "SqlTraceback"]
-
-
-def _create_cursor_wrapper(original_cursor: Callable[..., Any]) -> Callable[..., Any]:
-    """Create a cursor wrapper that adds stacktraces.
-
-    Args:
-        original_cursor: The original cursor creation function
-
-    Returns:
-        A wrapped cursor function that adds stacktrace functionality
-    """
-
-    @functools.wraps(original_cursor)
-    def cursor_with_stacktrace(*args: Any, **kwargs: Any) -> Any:
-        cursor = original_cursor(*args, **kwargs)
-
-        # If Django is in debug mode, it will use CursorDebugWrapper
-        if isinstance(cursor, CursorDebugWrapper):
-            return StacktraceDebugCursorWrapper(cursor.cursor, cursor.db)
-        return StacktraceCursorWrapper(cursor, connection)
-
-    return cursor_with_stacktrace
 
 
 class CursorProtocol(Protocol):
@@ -75,6 +51,26 @@ class CursorProtocol(Protocol):
     def fetchone(self) -> Any: ...
     def fetchmany(self, size: int = ...) -> list[Any]: ...
     def fetchall(self) -> list[Any]: ...
+
+
+def _execute_wrapper(execute, sql, params, many, context):
+    """Wrap SQL execution to add stacktraces and collect queries.
+
+    This is called by Django's execute_wrapper context manager for every SQL query.
+    """
+    from sql_traceback.collector_registry import get_active_collector
+    from sql_traceback.parser import add_stacktrace_to_query
+
+    # Add stacktrace to query
+    modified_sql, frames = add_stacktrace_to_query(sql)
+
+    # Register query with collector if one is active for this thread
+    collector = get_active_collector()
+    if collector and frames:
+        collector.add_query(modified_sql, frames)
+
+    # Execute with modified SQL
+    return execute(modified_sql, params, many, context)
 
 
 @contextlib.contextmanager
@@ -123,21 +119,17 @@ def sql_traceback():
     """
     # Create a collector for this context
     collector = TracebackCollector()
-    original_cursor = connection.cursor
 
     try:
         # Register collector as active for this thread (push onto stack)
         push_collector(collector)
 
-        # Apply cursor patch
-        connection.cursor = _create_cursor_wrapper(original_cursor)  # type: ignore[method-assign]
-        yield collector
+        # Use Django's execute_wrapper for thread-safe SQL wrapping
+        with connection.execute_wrapper(_execute_wrapper):
+            yield collector
     finally:
         # Unregister collector (pop from stack)
         pop_collector()
-
-        # Restore original cursor method
-        connection.cursor = original_cursor  # type: ignore[method-assign]
 
 
 class SqlTraceback:
@@ -172,19 +164,19 @@ class SqlTraceback:
     """
 
     def __init__(self):
-        self._original_cursor: Callable[..., Any] | None = None
         self._collector: TracebackCollector | None = None
 
     def __enter__(self):
         # Create a collector for this context
         self._collector = TracebackCollector()
-        self._original_cursor = connection.cursor
 
         # Register collector as active for this thread (push onto stack)
         push_collector(self._collector)
 
-        # Apply cursor patch
-        connection.cursor = _create_cursor_wrapper(self._original_cursor)  # type: ignore[method-assign]
+        # Enter Django's execute_wrapper context
+        self._execute_wrapper_context = connection.execute_wrapper(_execute_wrapper)
+        self._execute_wrapper_context.__enter__()
+
         return self._collector
 
     def __exit__(
@@ -193,17 +185,18 @@ class SqlTraceback:
         exc_val: BaseException | None,
         exc_tb: types.TracebackType | None,
     ) -> bool:
-        # Restore original cursor method even if an exception occurred
         try:
+            # Exit Django's execute_wrapper context
+            if hasattr(self, "_execute_wrapper_context"):
+                self._execute_wrapper_context.__exit__(exc_type, exc_val, exc_tb)
+
             # Unregister collector (pop from stack)
             pop_collector()
-
-            if hasattr(self, "_original_cursor") and self._original_cursor is not None:
-                connection.cursor = self._original_cursor  # type: ignore[method-assign]
         finally:
-            # Always reset the stored reference
-            self._original_cursor = None
+            # Always reset the stored references
             self._collector = None
+            if hasattr(self, "_execute_wrapper_context"):
+                del self._execute_wrapper_context
 
         # Don't suppress exceptions
         return False

@@ -11,7 +11,11 @@ if TYPE_CHECKING:
     from sql_traceback.traceback_info import TracebackCollector
 
 
-__all__ = ["get_active_collector", "push_collector", "pop_collector"]
+__all__ = [
+    "get_active_collector",
+    "push_collector",
+    "pop_collector",
+]
 
 
 # Thread-local storage for active collector stack

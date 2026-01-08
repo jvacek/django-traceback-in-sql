@@ -1,3 +1,8 @@
+"""Tests for Django settings integration and configuration.
+
+This module tests configuration behavior. Frame capture tests are in test_core_functionality.py.
+"""
+
 from unittest import mock
 from unittest.mock import patch
 
@@ -60,16 +65,16 @@ class TestSettingsConfiguration(TestCase):
 
     @mock.patch("sql_traceback.parser.TRACEBACK_ENABLED", False)
     def test_disabled_via_django_setting(self):
-        """Test that the context manager respects the SQL_TRACEBACK_ENABLED Django setting."""
-        # Clear the queries log
+        """Test that disabling traceback prevents frame capture."""
         connection.queries_log.clear()
 
         # Execute a query with the context manager, but with stacktraces disabled
-        with sql_traceback(), self.assertNumQueries(1), connection.cursor() as cursor:
+        with sql_traceback() as collector, self.assertNumQueries(1), connection.cursor() as cursor:
             cursor.execute("SELECT 1")
 
-        # Verify the query does not have a stacktrace comment
-        self.assertNotIn("STACKTRACE:", connection.queries[0]["sql"])
+        # Test actual functionality: when disabled, nothing is registered with collector
+        # (because add_stacktrace_to_query returns empty frames, and cursors skip collector.add_query)
+        self.assertEqual(len(collector.queries), 0, "Collector should be empty when disabled")
 
     def test_completely_disabled_stacktrace(self):
         """Test behavior when stacktracing is completely disabled."""
@@ -78,5 +83,7 @@ class TestSettingsConfiguration(TestCase):
 
             sql = "SELECT * FROM users"
             result_sql, result_frames = add_stacktrace_to_query(sql)
+
+            # Test frame capture behavior
             self.assertEqual(result_sql, sql, "Should return original SQL when disabled")
             self.assertEqual(result_frames, [], "Should return empty frames list when disabled")

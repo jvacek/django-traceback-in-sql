@@ -22,24 +22,26 @@ class TestStacktraceFiltering(TestCase):
         connection.queries_log.clear()
 
     def test_stacktrace_filtering_comprehensive(self):
-        """Test that the stacktrace filters out Django framework code."""
-        # Clear the queries log
+        """Test that frame filtering excludes Django framework code."""
         connection.queries_log.clear()
 
         # Execute a query with the context manager
-        with sql_traceback(), self.assertNumQueries(1), connection.cursor() as cursor:
+        with sql_traceback() as collector, self.assertNumQueries(1), connection.cursor() as cursor:
             cursor.execute("SELECT 1")
 
-        # Verify the query has a stacktrace
-        sql_with_stacktrace = connection.queries[0]["sql"]
-        self.assertIn("STACKTRACE:", sql_with_stacktrace)
+        # Test frame content directly
+        self.assertEqual(len(collector.queries), 1)
+        frames = collector.queries[0].frames
+        self.assertGreater(len(frames), 0, "Should have captured frames")
 
-        # Verify Django framework code is filtered out
-        self.assertNotIn("django/db/", sql_with_stacktrace)
-        self.assertNotIn("django/core/", sql_with_stacktrace)
+        frame_paths = [f.path for f in frames]
+
+        # Verify filtering worked on frames
+        self.assertFalse(any("django/db/" in path for path in frame_paths), "Django db frames should be filtered")
+        self.assertFalse(any("django/core/" in path for path in frame_paths), "Django core frames should be filtered")
 
         # Verify test code is included
-        self.assertIn("test_filter.py", sql_with_stacktrace)
+        self.assertTrue(any("test_filter.py" in path for path in frame_paths), "Test file should be included")
 
     def test_frame_filtering_logic(self):
         """Test the detailed frame filtering logic."""
